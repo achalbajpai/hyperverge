@@ -15,7 +15,9 @@ import {
     Users,
     Brain,
     Activity,
-    TrendingUp
+    TrendingUp,
+    Maximize,
+    Minimize
 } from 'lucide-react';
 import {
     IntegrityDashboardStats,
@@ -79,8 +81,98 @@ export default function VoiceIntegrityDashboard({ orgId }: VoiceIntegrityDashboa
         notes: '',
         follow_up_action: '',
     });
+    
+    // Fullscreen and permission states
+    const [cameraPermission, setCameraPermission] = useState<'not-requested' | 'granted' | 'denied'>('not-requested');
+    const [microphonePermission, setMicrophonePermission] = useState<'not-requested' | 'granted' | 'denied'>('not-requested');
+    const [fullscreenPermission, setFullscreenPermission] = useState<'not-requested' | 'granted' | 'denied'>('not-requested');
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [fullscreenViolations, setFullscreenViolations] = useState(0);
+    const [showSetupModal, setShowSetupModal] = useState(true);
+    const [setupComplete, setSetupComplete] = useState(false);
+    const [testStarted, setTestStarted] = useState(false);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
 
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Fullscreen functions
+    const requestCameraAndMicrophone = useCallback(async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: true, 
+                audio: true 
+            });
+            streamRef.current = stream;
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
+            setCameraPermission('granted');
+            setMicrophonePermission('granted');
+        } catch (error) {
+            console.error('Permission denied:', error);
+            setCameraPermission('denied');
+            setMicrophonePermission('denied');
+        }
+    }, []);
+
+    const requestFullscreen = useCallback(async () => {
+        try {
+            if (document.documentElement.requestFullscreen) {
+                await document.documentElement.requestFullscreen();
+                setFullscreenPermission('granted');
+            }
+        } catch (error) {
+            console.error('Fullscreen request failed:', error);
+            setFullscreenPermission('denied');
+        }
+    }, []);
+
+    const handleFullscreenChange = useCallback(() => {
+        const isCurrentlyFullscreen = !!document.fullscreenElement;
+        setIsFullscreen(isCurrentlyFullscreen);
+        
+        // If test has started and user exits fullscreen, count as violation
+        if (testStarted && !isCurrentlyFullscreen && setupComplete) {
+            setFullscreenViolations(prev => prev + 1);
+            showNotification('Fullscreen violation detected! Please return to fullscreen mode.', 'warning');
+        }
+    }, [testStarted, setupComplete]);
+
+    const handleSetupComplete = useCallback(async () => {
+        // Check all permissions are granted
+        if (cameraPermission !== 'granted' || microphonePermission !== 'granted' || fullscreenPermission !== 'granted') {
+            showNotification('Please grant all required permissions before proceeding.', 'error');
+            return;
+        }
+        
+        setSetupComplete(true);
+        setShowSetupModal(false);
+    }, [cameraPermission, microphonePermission, fullscreenPermission]);
+
+    const startTest = useCallback(() => {
+        if (!setupComplete) {
+            showNotification('Please complete setup first.', 'error');
+            return;
+        }
+        
+        if (!document.fullscreenElement) {
+            showNotification('Please enter fullscreen mode first.', 'warning');
+            requestFullscreen();
+            return;
+        }
+        
+        setTestStarted(true);
+        // Start voice monitoring when test begins
+        connectVoiceMonitoring();
+    }, [setupComplete, requestFullscreen, connectVoiceMonitoring]);
+
+    const stopStream = useCallback(() => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+    }, []);
 
     // Fetch dashboard stats
     const fetchStats = useCallback(async () => {
@@ -266,16 +358,25 @@ export default function VoiceIntegrityDashboard({ orgId }: VoiceIntegrityDashboa
     useEffect(() => {
         fetchStats();
         fetchFlags();
-        connectVoiceMonitoring();
+        
+        // Don't auto-connect voice monitoring - wait for test to start
+        if (testStarted) {
+            connectVoiceMonitoring();
+        }
 
         // Set up heartbeat interval
         const heartbeatInterval = setInterval(sendHeartbeat, 30000); // Every 30 seconds
+        
+        // Add fullscreen change listener
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
 
         return () => {
             clearInterval(heartbeatInterval);
             disconnectVoiceMonitoring();
+            stopStream();
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
         };
-    }, [fetchStats, fetchFlags, connectVoiceMonitoring, sendHeartbeat, disconnectVoiceMonitoring]);
+    }, [fetchStats, fetchFlags, connectVoiceMonitoring, sendHeartbeat, disconnectVoiceMonitoring, testStarted, handleFullscreenChange, stopStream]);
 
     const getSeverityColor = (severity: IntegritySeverity) => {
         switch (severity) {
@@ -311,10 +412,177 @@ export default function VoiceIntegrityDashboard({ orgId }: VoiceIntegrityDashboa
 
     return (
         <div className="space-y-6">
+            {/* Setup Modal */}
+            {showSetupModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                        <div className="text-center mb-6">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Setup Your Camera & Microphone</h2>
+                            <p className="text-gray-600">
+                                Your assessment requires camera and microphone access for integrity monitoring. 
+                                Click the button below to grant permissions and test your setup.
+                            </p>
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                                <p className="text-sm text-blue-800">
+                                    <strong>Privacy Note:</strong> Your camera and microphone will only be used during the assessment. 
+                                    No recordings are stored permanently on our servers.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Camera Preview */}
+                        <div className="mb-6">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-3">Camera Preview</h3>
+                            <div className="bg-gray-100 rounded-lg p-4 min-h-[300px] flex items-center justify-center">
+                                {cameraPermission === 'granted' ? (
+                                    <video 
+                                        ref={videoRef} 
+                                        autoPlay 
+                                        muted 
+                                        playsInline
+                                        className="w-full max-w-md h-64 object-cover rounded-lg bg-black"
+                                    />
+                                ) : (
+                                    <div className="text-center">
+                                        <div className="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center mx-auto mb-2">
+                                            <Eye className="h-8 w-8 text-gray-500" />
+                                        </div>
+                                        <p className="text-gray-500">Camera feed will appear here</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Permission Status */}
+                        <div className="mb-6">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-3">Permission Status</h3>
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between p-3 border rounded-lg">
+                                    <span className="font-medium text-gray-700">Camera Access</span>
+                                    <div className="flex items-center gap-2">
+                                        {cameraPermission === 'granted' ? (
+                                            <><CheckCircle className="h-5 w-5 text-green-500" /><span className="text-green-600">Granted</span></>
+                                        ) : cameraPermission === 'denied' ? (
+                                            <><XCircle className="h-5 w-5 text-red-500" /><span className="text-red-600">Denied</span></>
+                                        ) : (
+                                            <><Clock className="h-5 w-5 text-gray-500" /><span className="text-gray-600">Not Requested</span></>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-lg">
+                                    <span className="font-medium text-gray-700">Microphone Access</span>
+                                    <div className="flex items-center gap-2">
+                                        {microphonePermission === 'granted' ? (
+                                            <><CheckCircle className="h-5 w-5 text-green-500" /><span className="text-green-600">Granted</span></>
+                                        ) : microphonePermission === 'denied' ? (
+                                            <><XCircle className="h-5 w-5 text-red-500" /><span className="text-red-600">Denied</span></>
+                                        ) : (
+                                            <><Clock className="h-5 w-5 text-gray-500" /><span className="text-gray-600">Not Requested</span></>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between p-3 border rounded-lg">
+                                    <span className="font-medium text-gray-700">Fullscreen Access</span>
+                                    <div className="flex items-center gap-2">
+                                        {fullscreenPermission === 'granted' ? (
+                                            <><CheckCircle className="h-5 w-5 text-green-500" /><span className="text-green-600">Granted</span></>
+                                        ) : fullscreenPermission === 'denied' ? (
+                                            <><XCircle className="h-5 w-5 text-red-500" /><span className="text-red-600">Denied</span></>
+                                        ) : (
+                                            <><Clock className="h-5 w-5 text-gray-500" /><span className="text-gray-600">Not Requested</span></>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="mb-6">
+                            <Button 
+                                onClick={requestCameraAndMicrophone}
+                                className="w-full mb-3"
+                                disabled={cameraPermission === 'granted' && microphonePermission === 'granted'}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Mic className="h-5 w-5" />
+                                    <Eye className="h-5 w-5" />
+                                    Request Camera & Microphone Access
+                                </div>
+                            </Button>
+                            <Button 
+                                onClick={requestFullscreen}
+                                className="w-full mb-3"
+                                disabled={fullscreenPermission === 'granted'}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Maximize className="h-5 w-5" />
+                                    Request Fullscreen Access
+                                </div>
+                            </Button>
+                        </div>
+
+                        {/* Setup Tips */}
+                        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                            <h4 className="font-semibold text-gray-900 mb-3">Setup Tips</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                                <div>
+                                    <h5 className="font-semibold mb-2">Camera Setup</h5>
+                                    <ul className="space-y-1">
+                                        <li>• Position camera at eye level</li>
+                                        <li>• Ensure good lighting on your face</li>
+                                        <li>• Remove any obstructions</li>
+                                        <li>• Check that only you are visible</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h5 className="font-semibold mb-2">Environment</h5>
+                                    <ul className="space-y-1">
+                                        <li>• Find a quiet, private space</li>
+                                        <li>• Close other applications</li>
+                                        <li>• Ensure stable internet connection</li>
+                                        <li>• Remove unauthorized materials from view</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                            <Button
+                                onClick={handleSetupComplete}
+                                disabled={cameraPermission !== 'granted' || microphonePermission !== 'granted' || fullscreenPermission !== 'granted'}
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                                Complete Setup
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-light text-white">Voice Integrity Dashboard</h1>
                 <div className="flex items-center gap-4">
+                    {setupComplete && (
+                        <div className="flex items-center gap-2">
+                            {isFullscreen ? (
+                                <>
+                                    <Maximize className="h-4 w-4 text-green-400" />
+                                    <span className="text-sm text-green-400">Fullscreen</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Minimize className="h-4 w-4 text-red-400" />
+                                    <span className="text-sm text-red-400">Not Fullscreen</span>
+                                    {fullscreenViolations > 0 && (
+                                        <span className="bg-red-600 text-white px-2 py-1 rounded-full text-xs ml-2">
+                                            {fullscreenViolations} violations
+                                        </span>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
                     <div className="flex items-center gap-2">
                         {isVoiceMonitoringActive ? (
                             <>
@@ -328,6 +596,11 @@ export default function VoiceIntegrityDashboard({ orgId }: VoiceIntegrityDashboa
                             </>
                         )}
                     </div>
+                    {setupComplete && !testStarted && (
+                        <Button onClick={startTest} className="bg-green-600 hover:bg-green-700 text-white">
+                            Start Test
+                        </Button>
+                    )}
                     <Button onClick={() => { fetchStats(); fetchFlags(); }} className="flex items-center gap-2">
                         <RefreshCcw className="h-4 w-4" />
                         Refresh
