@@ -53,7 +53,7 @@ async def create_integrity_event(
             event_request.question_id,
             event_request.task_id,
         ),
-        fetch_one=True,
+        get_last_row_id=True,
     )
     
     return await get_integrity_event(event_id)

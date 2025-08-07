@@ -232,8 +232,20 @@ function AssessmentContent() {
         }
     };
 
+    // Throttle integrity event sending to prevent overwhelming the backend
+    const lastIntegrityEventTime = useRef<number>(0);
+    const INTEGRITY_EVENT_THROTTLE_MS = 1000; // Minimum 1 second between events
+
     const sendIntegrityEvent = async (eventType: string, eventData: any) => {
         if (!sessionId) return;
+
+        // Throttle requests to prevent overwhelming the backend
+        const now = Date.now();
+        if (now - lastIntegrityEventTime.current < INTEGRITY_EVENT_THROTTLE_MS) {
+            console.log('Throttling integrity event:', eventType);
+            return;
+        }
+        lastIntegrityEventTime.current = now;
 
         try {
             await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/events?user_id=${session?.user?.id || 1}`, {
@@ -361,7 +373,16 @@ function AssessmentContent() {
             
             // Step 2: Convert to base64 for API transmission
             const arrayBuffer = await combinedBlob.arrayBuffer();
-            const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+            const uint8Array = new Uint8Array(arrayBuffer);
+            
+            // Convert to base64 using a more efficient method for large files
+            let binaryString = '';
+            const chunkSize = 8192; // Process in chunks to avoid stack overflow
+            for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                const chunk = uint8Array.subarray(i, i + chunkSize);
+                binaryString += String.fromCharCode(...chunk);
+            }
+            const base64Audio = btoa(binaryString);
             
             // Step 3: Send to our Sarvam → OpenAI processing API
             const response = await fetch('/api/sarvam/process-test-audio', {

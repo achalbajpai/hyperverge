@@ -32,6 +32,11 @@ try:
 except ImportError:
     PYANNOTE_AVAILABLE = False
     logging.warning("pyannote.audio not available. Install with: pip install pyannote.audio")
+    # Create dummy classes for type hints when pyannote is not available
+    class Annotation:
+        pass
+    class Segment:
+        pass
 
 try:
     import soundfile as sf

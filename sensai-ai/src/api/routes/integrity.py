@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
+import asyncio
 from api.db.integrity import (
     create_integrity_event,
     get_integrity_event,
@@ -39,30 +40,29 @@ router = APIRouter()
 # Integrity Events Endpoints
 
 @router.post("/events", response_model=IntegrityEvent)
-async def create_event(
-    event_request: CreateIntegrityEventRequest,
-    user_id: Optional[int] = Query(None)
+async def create_event_endpoint(
+    event: CreateIntegrityEventRequest,
+    user_id: int = Query(..., description="User ID")
 ):
     """Create a new integrity event."""
-    try:
-        # Get user_id from query params if not in body
-        if user_id is None:
-            raise HTTPException(status_code=400, detail="user_id query parameter is required")
-        
-        return await create_integrity_event(user_id, event_request)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create integrity event: {str(e)}")
-
-
-# Add a GET endpoint for /events with user_id query param for compatibility
-@router.get("/events", response_model=List[IntegrityEvent])
-async def get_events_by_user_id(
-    user_id: int = Query(..., description="User ID to get events for"),
-    session_id: Optional[str] = Query(None),
-    limit: int = Query(100, le=500)
-):
-    """Get integrity events for a user using query parameter."""
-    return await get_user_integrity_events(user_id, session_id, limit)
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            return await create_integrity_event(user_id, event)
+        except Exception as e:
+            retry_count += 1
+            if "database is locked" in str(e).lower() or "busy" in str(e).lower():
+                if retry_count < max_retries:
+                    await asyncio.sleep(0.1 * retry_count)  # Exponential backoff
+                    continue
+                else:
+                    raise HTTPException(status_code=500, detail="Database busy, please try again")
+            else:
+                raise HTTPException(status_code=422 if "validation" in str(e).lower() else 500, detail=str(e))
+    
+    raise HTTPException(status_code=500, detail="Failed to create integrity event after multiple retries")
 
 
 @router.get("/events/{event_id}", response_model=IntegrityEvent)
