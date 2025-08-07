@@ -4,7 +4,7 @@ import FormData from 'form-data';
 
 export async function POST(request: NextRequest) {
     try {
-        const { audio_data, audio_format, session_id, test_duration_minutes, assignment_id } = await request.json();
+        const { audio_data, audio_format, session_id, test_duration_minutes, assignment_id, user_id } = await request.json();
 
         if (!audio_data) {
             return NextResponse.json({ error: 'No audio data provided' }, { status: 400 });
@@ -82,7 +82,10 @@ Suspicious Phrases: ${openaiResult.suspicious_phrases.join(', ') || 'None'}`,
 
                 console.log('🔍 Sending flag data to backend:', JSON.stringify(flagData, null, 2));
 
-                const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/flags?user_id=1`, {
+                // Use the user_id from request or default to 1 for testing
+                const userId = user_id || '1';
+                
+                const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/flags?user_id=${userId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -98,6 +101,16 @@ Suspicious Phrases: ${openaiResult.suspicious_phrases.join(', ') || 'None'}`,
                     console.error('❌ Failed to save integrity flag:');
                     console.error('Status:', response.status, response.statusText);
                     console.error('Response:', errorText);
+                    
+                    // Log the flag data for debugging
+                    console.log('💾 Flag data that failed to save:', {
+                        type: 'audio_cheating_detection',
+                        confidence: openaiResult.confidence,
+                        cheating_detected: openaiResult.cheating_detected,
+                        transcription: sarvamResult.transcription_english,
+                        session_id: session_id,
+                        timestamp: new Date().toISOString()
+                    });
                 }
             } catch (error) {
                 console.error('❌ Failed to save integrity flag:', error);

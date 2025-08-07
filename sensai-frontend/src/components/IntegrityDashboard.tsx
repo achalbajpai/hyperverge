@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { AlertTriangle, CheckCircle, XCircle, Clock, Eye, Filter, RefreshCcw, Mic, Activity } from 'lucide-react';
 import VoiceIntegrityDashboard from './VoiceIntegrityDashboard';
+import { ConfidenceDashboard } from './ConfidenceDashboard';
 import {
     IntegrityDashboardStats,
     IntegrityFlagWithDetails,
@@ -533,11 +534,21 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                                 )}
                                             </div>
                                         </div>
+
+                                        {/* Enhanced Confidence Dashboard */}
+                                        {selectedFlag.evidence_data.confidence_breakdown && (
+                                            <div className="mt-4">
+                                                <ConfidenceDashboard 
+                                                    confidenceBreakdown={selectedFlag.evidence_data.confidence_breakdown}
+                                                    className="mt-4"
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 {/* Enhanced Evidence Data Display */}
-                                {selectedFlag.evidence_data && !selectedFlag.evidence_data.full_transcription && (
+                                {selectedFlag.evidence_data && !selectedFlag.evidence_data.full_transcription && !selectedFlag.evidence_data.confidence_breakdown && (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Evidence Details</label>
                                         <div className="bg-gray-50 border p-3 rounded">
