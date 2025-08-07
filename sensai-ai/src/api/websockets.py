@@ -1,3 +1,4 @@
+import json
 from typing import Dict, Set
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.routing import APIRouter
@@ -248,3 +249,189 @@ def get_manager() -> ConnectionManager:
 # Function to get the integrity connection manager instance
 def get_integrity_manager() -> IntegrityConnectionManager:
     return integrity_manager
+
+
+# Voice Processing Integration
+try:
+    from api.voice_integrity.websocket_handler import VoiceWebSocketManager
+    # Create voice WebSocket manager instance
+    voice_manager = VoiceWebSocketManager(integrity_manager)
+    VOICE_PROCESSING_AVAILABLE = True
+    print("✓ Voice processing WebSocket manager initialized")
+except ImportError as e:
+    print(f"Voice processing not available: {e}")
+    try:
+        # Try alternative import path
+        from src.api.voice_integrity.websocket_handler import VoiceWebSocketManager
+        voice_manager = VoiceWebSocketManager(integrity_manager)
+        VOICE_PROCESSING_AVAILABLE = True
+        print("✓ Voice processing WebSocket manager initialized (alternative path)")
+    except ImportError as e2:
+        print(f"Voice processing not available (alternative): {e2}")
+        voice_manager = None
+        VOICE_PROCESSING_AVAILABLE = False
+
+
+# WebSocket endpoint for real-time voice processing
+@router.websocket("/voice/session/{session_id}")
+async def websocket_voice_session(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for real-time voice processing and analysis."""
+    try:
+        await websocket.accept()
+        
+        if not VOICE_PROCESSING_AVAILABLE or not voice_manager:
+            await websocket.send_json({
+                "type": "voice_error",
+                "data": {"message": "Voice processing not available"}
+            })
+            await websocket.close(code=1003, reason="Voice processing unavailable")
+            return
+        
+        # Start voice processing session
+        if not await voice_manager.start_voice_session(websocket, session_id):
+            await websocket.close(code=1003, reason="Failed to start voice session")
+            return
+        
+        # Handle voice processing messages
+        while True:
+            try:
+                message = await websocket.receive()
+                
+                # Handle different message types
+                if "bytes" in message:
+                    # Audio data received
+                    audio_data = message["bytes"]
+                    result = await voice_manager.process_audio_chunk(session_id, audio_data)
+                    
+                    if "error" in result:
+                        await websocket.send_json({
+                            "type": "voice_error",
+                            "data": result
+                        })
+                
+                elif "text" in message:
+                    # JSON message received
+                    try:
+                        data = json.loads(message["text"])
+                        message_type = data.get("type")
+                        
+                        if message_type == "heartbeat":
+                            await websocket.send_json({
+                                "type": "heartbeat_ack",
+                                "data": {"timestamp": datetime.utcnow().isoformat()}
+                            })
+                        
+                        elif message_type == "audio_chunk":
+                            # Base64 encoded audio in JSON
+                            audio_data = data.get("data", {}).get("audio", "")
+                            if audio_data:
+                                result = await voice_manager.process_audio_chunk(session_id, audio_data)
+                                await websocket.send_json({
+                                    "type": "audio_processed",
+                                    "data": result
+                                })
+                        
+                        elif message_type == "stop_voice_session":
+                            # Stop voice processing
+                            summary = await voice_manager.stop_voice_session(session_id)
+                            await websocket.send_json({
+                                "type": "voice_session_summary", 
+                                "data": summary
+                            })
+                            break
+                        
+                        elif message_type == "get_session_status":
+                            # Get current session status
+                            status = voice_manager.get_active_sessions()
+                            await websocket.send_json({
+                                "type": "session_status",
+                                "data": status
+                            })
+                    
+                    except json.JSONDecodeError:
+                        await websocket.send_json({
+                            "type": "error",
+                            "data": {"message": "Invalid JSON message"}
+                        })
+                        
+            except Exception as e:
+                print(f"Error processing voice message: {e}")
+                break
+                
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"Voice WebSocket error: {e}")
+    finally:
+        # Clean up session
+        if session_id in voice_manager.active_sessions:
+            await voice_manager.stop_voice_session(session_id)
+
+
+# WebSocket endpoint for voice monitoring dashboard
+@router.websocket("/voice/monitor/{org_id}")
+async def websocket_voice_monitor(websocket: WebSocket, org_id: int):
+    """WebSocket endpoint for admin voice monitoring dashboard."""
+    try:
+        await websocket.accept()
+        
+        if not VOICE_PROCESSING_AVAILABLE or not voice_manager:
+            await websocket.send_json({
+                "type": "voice_error", 
+                "data": {"message": "Voice processing not available"}
+            })
+            await websocket.close(code=1003, reason="Voice processing unavailable")
+            return
+        
+        await integrity_manager.connect_admin(websocket, org_id)
+        
+        # Send initial status
+        await websocket.send_json({
+            "type": "voice_monitor_connected",
+            "data": {
+                "org_id": org_id,
+                "active_sessions": voice_manager.get_active_sessions(),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        })
+        
+        # Keep connection alive and send periodic updates
+        while True:
+            message = await websocket.receive_text()
+            
+            # Handle monitor requests
+            try:
+                data = json.loads(message)
+                message_type = data.get("type")
+                
+                if message_type == "get_active_sessions":
+                    await websocket.send_json({
+                        "type": "active_sessions",
+                        "data": voice_manager.get_active_sessions()
+                    })
+                
+                elif message_type == "heartbeat":
+                    await websocket.send_json({
+                        "type": "heartbeat_ack",
+                        "data": {"timestamp": datetime.utcnow().isoformat()}
+                    })
+                    
+            except json.JSONDecodeError:
+                await websocket.send_json({
+                    "type": "error", 
+                    "data": {"message": "Invalid JSON"}
+                })
+                
+    except WebSocketDisconnect:
+        integrity_manager.disconnect_admin(websocket, org_id)
+    except Exception as e:
+        print(f"Voice monitor WebSocket error: {e}")
+        integrity_manager.disconnect_admin(websocket, org_id)
+
+
+# Function to get the voice WebSocket manager instance
+def get_voice_manager():
+    """Get the voice WebSocket manager instance if available."""
+    if VOICE_PROCESSING_AVAILABLE and voice_manager:
+        return voice_manager
+    return None

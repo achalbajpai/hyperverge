@@ -155,17 +155,3 @@ async def get_task(task_id: int) -> LearningMaterialTask | QuizTask:
 async def mark_task_completed(task_id: int, request: MarkTaskCompletedRequest):
     await mark_task_completed_in_db(task_id, request.user_id)
     return {"success": True}
-
-
-@router.post("/{task_id}/save")
-async def save_project(task_id: int, request: Dict):
-    """Save project code for a task."""
-    # For now, just return success. In production, you'd save to database
-    return {"success": True, "message": "Project saved successfully"}
-
-
-@router.post("/{task_id}/submit")
-async def submit_project(task_id: int, request: Dict):
-    """Submit project code for a task."""
-    # For now, just return success. In production, you'd save to database and mark as submitted
-    return {"success": True, "message": "Project submitted successfully"}
