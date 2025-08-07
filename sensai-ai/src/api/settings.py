@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     google_client_id: str
     google_client_secret: str  # Added this field
     openai_api_key: str
+    hf_token: str | None = None  # Hugging Face token for advanced voice processing
     s3_bucket_name: str | None = None  # only relevant when running the code remotely
     s3_folder_name: str | None = None  # only relevant when running the code remotely
     local_upload_folder: str = (
@@ -45,6 +46,9 @@ settings = get_settings()
 
 if settings.phoenix_api_key is not None:
     os.environ["PHOENIX_API_KEY"] = settings.phoenix_api_key
+
+if settings.hf_token is not None:
+    os.environ["HF_TOKEN"] = settings.hf_token
 
 tracer_provider = register(
     protocol="http/protobuf",
