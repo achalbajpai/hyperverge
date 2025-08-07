@@ -7,13 +7,16 @@ from api.config import UPLOAD_FOLDER_NAME
 from phoenix.otel import register
 
 root_dir = os.path.dirname(os.path.abspath(__file__))
-env_path = join(root_dir, ".env.aws")
+# Go up two levels to reach the project root: /src/api/ -> /src/ -> /
+project_root = join(root_dir, "..", "..")
+env_path = join(project_root, ".env.aws")
 if os.path.exists(env_path):
     load_dotenv(env_path)
 
 
 class Settings(BaseSettings):
     google_client_id: str
+    google_client_secret: str  # Added this field
     openai_api_key: str
     s3_bucket_name: str | None = None  # only relevant when running the code remotely
     s3_folder_name: str | None = None  # only relevant when running the code remotely
@@ -28,7 +31,9 @@ class Settings(BaseSettings):
     phoenix_endpoint: str | None = None
     phoenix_api_key: str | None = None
 
-    model_config = SettingsConfigDict(env_file=join(root_dir, ".env"))
+    model_config = SettingsConfigDict(
+        env_file=join(project_root, ".env"), extra="ignore"
+    )
 
 
 @lru_cache
