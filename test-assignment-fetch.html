@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Test Assignment Fetch</title>
+</head>
+
+<body>
+    <h1>Testing Assignment ID 10 Fetch</h1>
+    <div id="result"></div>
+
+    <script>
+        async function testFetchAssignment() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing...';
+
+            try {
+                console.log('Starting fetchAssignment test for ID 10...');
+
+                // Simulate the same logic as our fetchAssignment function
+                let response = await fetch('http://localhost:8001/tasks/10');
+                console.log('Direct fetch /tasks/10:', response.status);
+
+                if (!response.ok) {
+                    console.log('Direct fetch failed, trying course mapping...');
+
+                    // Try courses 1-5 to find the mapping
+                    const coursesToCheck = [1, 2, 3, 4, 5];
+                    let foundTask = null;
+
+                    for (const courseId of coursesToCheck) {
+                        try {
+                            const tasksResponse = await fetch(`http://localhost:8001/courses/${courseId}/tasks`);
+                            if (tasksResponse.ok) {
+                                const tasks = await tasksResponse.json();
+                                console.log(`Course ${courseId} tasks:`, tasks);
+
+                                const matchingTask = tasks.find(task =>
+                                    task.course_task_id === 10
+                                );
+
+                                if (matchingTask) {
+                                    console.log('Found matching task:', matchingTask);
+                                    foundTask = matchingTask;
+                                    break;
+                                }
+                            }
+                        } catch (error) {
+                            console.log(`Error checking course ${courseId}:`, error);
+                        }
+                    }
+
+                    if (foundTask) {
+                        console.log(`Found task ID ${foundTask.id} for assignment ID 10`);
+                        response = await fetch(`http://localhost:8001/tasks/${foundTask.id}`);
+                        console.log('Actual task fetch:', response.status);
+                    }
+                }
+
+                if (response.ok) {
+                    const taskData = await response.json();
+                    console.log('Task data:', taskData);
+                    resultDiv.innerHTML = `
+                        <h2>✅ Success!</h2>
+                        <p><strong>Assignment ID 10 resolved successfully</strong></p>
+                        <p>Task ID: ${taskData.id}</p>
+                        <p>Title: ${taskData.title}</p>
+                        <p>Type: ${taskData.type}</p>
+                        <p>Status: ${taskData.status}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h2>❌ Failed</h2>
+                        <p>Could not resolve assignment ID 10</p>
+                        <p>Response status: ${response.status}</p>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `
+                    <h2>❌ Error</h2>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+
+        // Run test on page load
+        window.addEventListener('load', testFetchAssignment);
+    </script>
+</body>
+
+</html>

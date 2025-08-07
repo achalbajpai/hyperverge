@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { AlertTriangle, CheckCircle, XCircle, Clock, Eye, Filter, RefreshCcw } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { AlertTriangle, CheckCircle, XCircle, Clock, Eye, Filter, RefreshCcw, Mic, Activity } from 'lucide-react';
+import VoiceIntegrityDashboard from './VoiceIntegrityDashboard';
 import {
     IntegrityDashboardStats,
     IntegrityFlagWithDetails,
@@ -222,6 +224,21 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                     Refresh
                 </Button>
             </div>
+
+            {/* Tabs for different views */}
+            <Tabs defaultValue="general" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 bg-gray-800">
+                    <TabsTrigger value="general" className="flex items-center gap-2">
+                        <Activity className="h-4 w-4" />
+                        General Integrity
+                    </TabsTrigger>
+                    <TabsTrigger value="voice" className="flex items-center gap-2">
+                        <Mic className="h-4 w-4" />
+                        Voice Analysis
+                    </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="general" className="space-y-6 mt-6">
 
             {/* Error Message */}
             {error && (
@@ -737,6 +754,12 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                     </div>
                 </div>
             )}
+                </TabsContent>
+
+                <TabsContent value="voice" className="mt-6">
+                    <VoiceIntegrityDashboard orgId={orgId} />
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }

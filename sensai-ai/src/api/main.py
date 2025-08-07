@@ -6,6 +6,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 import os
 from os.path import exists
+import warnings
+
+# Suppress TorchAudio deprecation warnings globally
+warnings.filterwarnings(
+    "ignore", category=UserWarning, message=".*torchaudio.*deprecated.*"
+)
+warnings.filterwarnings("ignore", category=UserWarning, message=".*torch.*backends.*")
+
 from api.config import UPLOAD_FOLDER_NAME
 from api.routes import (
     auth,
@@ -24,6 +32,16 @@ from api.routes import (
     integrity,
     follow_up,
 )
+
+# Voice integrity routes (optional - will gracefully handle missing dependencies)
+try:
+    from api.routes import voice_integrity
+
+    VOICE_INTEGRITY_AVAILABLE = True
+except ImportError as e:
+    print(f"Voice integrity routes not available: {e}")
+    voice_integrity = None
+    VOICE_INTEGRITY_AVAILABLE = False
 from api.routes.ai import (
     resume_pending_task_generation_jobs,
     resume_pending_course_structure_generation_jobs,
@@ -119,7 +137,16 @@ app.include_router(scorecard.router, prefix="/scorecards", tags=["scorecards"])
 app.include_router(code.router, prefix="/code", tags=["code"])
 app.include_router(hva.router, prefix="/hva", tags=["hva"])
 app.include_router(integrity.router, prefix="/integrity", tags=["integrity"])
-app.include_router(follow_up.router, prefix="/integrity", tags=["integrity", "follow-up"])
+app.include_router(
+    follow_up.router, prefix="/integrity", tags=["integrity", "follow-up"]
+)
+
+# Include voice integrity routes if available
+if VOICE_INTEGRITY_AVAILABLE and voice_integrity:
+    app.include_router(
+        voice_integrity.router, prefix="/voice-integrity", tags=["voice-integrity"]
+    )
+
 app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
 
 

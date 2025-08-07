@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
+import asyncio
 from api.db.integrity import (
     create_integrity_event,
     get_integrity_event,
@@ -38,31 +39,38 @@ router = APIRouter()
 
 # Integrity Events Endpoints
 
+
 @router.post("/events", response_model=IntegrityEvent)
-async def create_event(
-    event_request: CreateIntegrityEventRequest,
-    user_id: Optional[int] = Query(None)
+async def create_event_endpoint(
+    event: CreateIntegrityEventRequest, user_id: int = Query(..., description="User ID")
 ):
     """Create a new integrity event."""
-    try:
-        # Get user_id from query params if not in body
-        if user_id is None:
-            raise HTTPException(status_code=400, detail="user_id query parameter is required")
-        
-        return await create_integrity_event(user_id, event_request)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create integrity event: {str(e)}")
+    max_retries = 3
+    retry_count = 0
 
+    while retry_count < max_retries:
+        try:
+            return await create_integrity_event(user_id, event)
+        except Exception as e:
+            retry_count += 1
+            if "database is locked" in str(e).lower() or "busy" in str(e).lower():
+                if retry_count < max_retries:
+                    await asyncio.sleep(0.1 * retry_count)  # Exponential backoff
+                    continue
+                else:
+                    raise HTTPException(
+                        status_code=500, detail="Database busy, please try again"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=422 if "validation" in str(e).lower() else 500,
+                    detail=str(e),
+                )
 
-# Add a GET endpoint for /events with user_id query param for compatibility
-@router.get("/events", response_model=List[IntegrityEvent])
-async def get_events_by_user_id(
-    user_id: int = Query(..., description="User ID to get events for"),
-    session_id: Optional[str] = Query(None),
-    limit: int = Query(100, le=500)
-):
-    """Get integrity events for a user using query parameter."""
-    return await get_user_integrity_events(user_id, session_id, limit)
+    raise HTTPException(
+        status_code=500,
+        detail="Failed to create integrity event after multiple retries",
+    )
 
 
 @router.get("/events/{event_id}", response_model=IntegrityEvent)
@@ -78,7 +86,7 @@ async def get_event(event_id: int):
 async def get_user_events(
     user_id: int,
     session_id: Optional[str] = Query(None),
-    limit: int = Query(100, le=500)
+    limit: int = Query(100, le=500),
 ):
     """Get integrity events for a user."""
     return await get_user_integrity_events(user_id, session_id, limit)
@@ -86,27 +94,28 @@ async def get_user_events(
 
 # Proctoring Sessions Endpoints
 
+
 @router.post("/sessions", response_model=ProctoringSession)
-async def start_session(
-    user_id: int,
-    session_request: StartProctoringSessionRequest
-):
+async def start_session(user_id: int, session_request: StartProctoringSessionRequest):
     """Start a new proctoring session."""
     try:
         return await start_proctoring_session(user_id, session_request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start proctoring session: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start proctoring session: {str(e)}"
+        )
 
 
 @router.put("/sessions/{session_id}/end")
 async def end_session(
-    session_id: str,
-    integrity_score: Optional[float] = Query(None, ge=0, le=1)
+    session_id: str, integrity_score: Optional[float] = Query(None, ge=0, le=1)
 ):
     """End a proctoring session."""
     success = await end_proctoring_session(session_id, integrity_score)
     if not success:
-        raise HTTPException(status_code=404, detail="Proctoring session not found or already ended")
+        raise HTTPException(
+            status_code=404, detail="Proctoring session not found or already ended"
+        )
     return {"message": "Session ended successfully"}
 
 
@@ -121,16 +130,16 @@ async def get_session(session_id: str):
 
 # Integrity Flags Endpoints
 
+
 @router.post("/flags", response_model=IntegrityFlag)
-async def create_flag(
-    user_id: int,
-    flag_request: CreateIntegrityFlagRequest
-):
+async def create_flag(user_id: int, flag_request: CreateIntegrityFlagRequest):
     """Create a new integrity flag."""
     try:
         return await create_integrity_flag(user_id, flag_request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create integrity flag: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create integrity flag: {str(e)}"
+        )
 
 
 @router.get("/flags/{flag_id}", response_model=IntegrityFlag)
@@ -148,30 +157,35 @@ async def get_flags(
     severity: Optional[IntegritySeverity] = Query(None),
     flag_type: Optional[IntegrityFlagType] = Query(None),
     limit: int = Query(50, le=200),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
 ):
     """Get integrity flags with filtering options."""
-    return await get_integrity_flags_with_details(status, severity, flag_type, limit, offset)
+    return await get_integrity_flags_with_details(
+        status, severity, flag_type, limit, offset
+    )
 
 
 # Integrity Reviews Endpoints
+
 
 @router.post("/flags/{flag_id}/reviews", response_model=IntegrityReview)
 async def create_review(
     flag_id: int,
     review_request: CreateIntegrityReviewRequest,
-    reviewer_user_id: int = Query(...)
+    reviewer_user_id: int = Query(...),
 ):
     """Create a review for an integrity flag."""
     # Verify the flag exists first
     flag = await get_integrity_flag(flag_id)
     if not flag:
         raise HTTPException(status_code=404, detail="Integrity flag not found")
-    
+
     try:
         return await create_integrity_review(flag_id, reviewer_user_id, review_request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create review: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create review: {str(e)}"
+        )
 
 
 @router.get("/reviews/{review_id}", response_model=IntegrityReview)
@@ -194,11 +208,10 @@ async def complete_followup(review_id: int):
 
 # Timeline and Dashboard Endpoints
 
+
 @router.get("/users/{user_id}/timeline", response_model=List[IntegrityTimelineEntry])
 async def get_user_timeline(
-    user_id: int,
-    task_id: Optional[int] = Query(None),
-    limit: int = Query(50, le=200)
+    user_id: int, task_id: Optional[int] = Query(None), limit: int = Query(50, le=200)
 ):
     """Get integrity timeline for a user."""
     return await get_user_integrity_timeline(user_id, task_id, limit)
@@ -212,11 +225,9 @@ async def get_dashboard_stats():
 
 # Batch Operations
 
+
 @router.post("/events/batch")
-async def create_events_batch(
-    user_id: int,
-    events: List[CreateIntegrityEventRequest]
-):
+async def create_events_batch(user_id: int, events: List[CreateIntegrityEventRequest]):
     """Create multiple integrity events in batch."""
     created_events = []
     for event_request in events:
@@ -227,19 +238,16 @@ async def create_events_batch(
             # Continue with other events but log the error
             print(f"Failed to create event {event_request.event_type}: {e}")
             continue
-    
+
     return {
         "created_count": len(created_events),
         "total_requested": len(events),
-        "events": created_events
+        "events": created_events,
     }
 
 
 @router.post("/flags/batch")
-async def create_flags_batch(
-    user_id: int,
-    flags: List[CreateIntegrityFlagRequest]
-):
+async def create_flags_batch(user_id: int, flags: List[CreateIntegrityFlagRequest]):
     """Create multiple integrity flags in batch."""
     created_flags = []
     for flag_request in flags:
@@ -250,15 +258,16 @@ async def create_flags_batch(
             # Continue with other flags but log the error
             print(f"Failed to create flag {flag_request.flag_type}: {e}")
             continue
-    
+
     return {
         "created_count": len(created_flags),
         "total_requested": len(flags),
-        "flags": created_flags
+        "flags": created_flags,
     }
 
 
 # Health Check
+
 
 @router.get("/health")
 async def health_check():

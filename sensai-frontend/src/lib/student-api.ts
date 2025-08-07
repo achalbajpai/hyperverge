@@ -309,7 +309,46 @@ export function createMockAssignments(): Course[] {
  */
 export async function fetchAssignment(assignmentId: number): Promise<Assignment | null> {
     try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tasks/${assignmentId}`);
+        // First try to fetch using the assignment ID directly as task_id
+        let response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tasks/${assignmentId}`);
+        
+        // If that fails, the assignmentId might be a course_task_id, so we need to find the actual task_id
+        if (!response.ok) {
+            // We need to find the actual task_id by checking course tasks
+            // Since we don't have user context here, let's try a different approach
+            // Let's check if this might be a course_task_id by trying to find it in course tasks
+            
+            // For now, let's try courses 1, 2, 3 (common course IDs) to find the mapping
+            const coursesToCheck = [1, 2, 3, 4, 5];
+            let foundTask = null;
+            
+            for (const courseId of coursesToCheck) {
+                try {
+                    const tasksResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/courses/${courseId}/tasks`);
+                    if (tasksResponse.ok) {
+                        const tasks = await tasksResponse.json();
+                        const matchingTask = tasks.find((task: any) => 
+                            (task.course_task_id && task.course_task_id === assignmentId) ||
+                            (courseId * 1000 + task.id) === assignmentId
+                        );
+                        
+                        if (matchingTask) {
+                            foundTask = matchingTask;
+                            break;
+                        }
+                    }
+                } catch (error) {
+                    // Continue to next course if this one fails
+                    continue;
+                }
+            }
+            
+            if (foundTask) {
+                // Found the task, now fetch it using the actual task_id
+                response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tasks/${foundTask.id}`);
+            }
+        }
+        
         if (!response.ok) {
             console.log(`Backend task ${assignmentId} not found, using mock data`);
             // Fall back to mock data when backend doesn't have the assignment
@@ -320,7 +359,7 @@ export async function fetchAssignment(assignmentId: number): Promise<Assignment 
         
         // Transform task data to assignment format
         const assignment: Assignment = {
-            id: taskData.id,
+            id: assignmentId, // Keep the original assignment ID for UI consistency
             title: taskData.name || taskData.title,
             description: taskData.description || '',
             type: taskData.type,

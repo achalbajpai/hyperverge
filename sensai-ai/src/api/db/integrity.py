@@ -36,8 +36,10 @@ async def create_integrity_event(
     user_id: int, event_request: CreateIntegrityEventRequest
 ) -> IntegrityEvent:
     """Create a new integrity event."""
-    event_data_json = json.dumps(event_request.event_data) if event_request.event_data else None
-    
+    event_data_json = (
+        json.dumps(event_request.event_data) if event_request.event_data else None
+    )
+
     event_id = await execute_db_operation(
         f"""
         INSERT INTO {integrity_events_table_name} 
@@ -53,9 +55,9 @@ async def create_integrity_event(
             event_request.question_id,
             event_request.task_id,
         ),
-        fetch_one=True,
+        get_last_row_id=True,
     )
-    
+
     return await get_integrity_event(event_id)
 
 
@@ -71,12 +73,12 @@ async def get_integrity_event(event_id: int) -> Optional[IntegrityEvent]:
         (event_id,),
         fetch_one=True,
     )
-    
+
     if not row:
         return None
-    
+
     event_data = json.loads(row[4]) if row[4] else None
-    
+
     return IntegrityEvent(
         id=row[0],
         user_id=row[1],
@@ -103,16 +105,16 @@ async def get_user_integrity_events(
         WHERE user_id = ?
     """
     params = [user_id]
-    
+
     if session_id:
         query += " AND session_id = ?"
         params.append(session_id)
-    
+
     query += " ORDER BY created_at DESC LIMIT ?"
     params.append(limit)
-    
+
     rows = await execute_db_operation(query, tuple(params), fetch_all=True)
-    
+
     events = []
     for row in rows:
         event_data = json.loads(row[4]) if row[4] else None
@@ -129,7 +131,7 @@ async def get_user_integrity_events(
                 created_at=datetime.fromisoformat(row[8]) if row[8] else None,
             )
         )
-    
+
     return events
 
 
@@ -138,8 +140,12 @@ async def start_proctoring_session(
 ) -> ProctoringSession:
     """Start a new proctoring session."""
     session_id = str(uuid.uuid4())
-    session_data_json = json.dumps(session_request.session_data) if session_request.session_data else None
-    
+    session_data_json = (
+        json.dumps(session_request.session_data)
+        if session_request.session_data
+        else None
+    )
+
     await execute_db_operation(
         f"""
         INSERT INTO {proctoring_sessions_table_name}
@@ -154,7 +160,7 @@ async def start_proctoring_session(
             session_data_json,
         ),
     )
-    
+
     return await get_proctoring_session(session_id)
 
 
@@ -185,12 +191,12 @@ async def get_proctoring_session(session_id: str) -> Optional[ProctoringSession]
         (session_id,),
         fetch_one=True,
     )
-    
+
     if not row:
         return None
-    
+
     session_data = json.loads(row[7]) if row[7] else None
-    
+
     return ProctoringSession(
         id=row[0],
         session_id=row[1],
@@ -208,8 +214,10 @@ async def create_integrity_flag(
     user_id: int, flag_request: CreateIntegrityFlagRequest
 ) -> IntegrityFlag:
     """Create a new integrity flag."""
-    evidence_data_json = json.dumps(flag_request.evidence_data) if flag_request.evidence_data else None
-    
+    evidence_data_json = (
+        json.dumps(flag_request.evidence_data) if flag_request.evidence_data else None
+    )
+
     flag_id = await execute_db_operation(
         f"""
         INSERT INTO {integrity_flags_table_name}
@@ -231,7 +239,7 @@ async def create_integrity_flag(
         ),
         fetch_one=True,
     )
-    
+
     return await get_integrity_flag(flag_id)
 
 
@@ -248,12 +256,12 @@ async def get_integrity_flag(flag_id: int) -> Optional[IntegrityFlag]:
         (flag_id,),
         fetch_one=True,
     )
-    
+
     if not row:
         return None
-    
+
     evidence_data = json.loads(row[6]) if row[6] else None
-    
+
     return IntegrityFlag(
         id=row[0],
         user_id=row[1],
@@ -297,29 +305,29 @@ async def get_integrity_flags_with_details(
         WHERE 1=1
     """
     params = []
-    
+
     if status:
         query += " AND f.status = ?"
         params.append(status.value)
-    
+
     if severity:
         query += " AND f.severity = ?"
         params.append(severity.value)
-    
+
     if flag_type:
         query += " AND f.flag_type = ?"
         params.append(flag_type.value)
-    
+
     query += " ORDER BY f.created_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
-    
+
     rows = await execute_db_operation(query, tuple(params), fetch_all=True)
-    
+
     flags = []
     for row in rows:
         evidence_data = json.loads(row[6]) if row[6] else None
         user_name = f"{row[14] or ''} {row[15] or ''}".strip() or None
-        
+
         review = None
         if row[17]:  # review_id exists
             review = IntegrityReview(
@@ -332,7 +340,7 @@ async def get_integrity_flags_with_details(
                 follow_up_completed=bool(row[22]),
                 reviewed_at=datetime.fromisoformat(row[23]),
             )
-        
+
         flags.append(
             IntegrityFlagWithDetails(
                 id=row[0],
@@ -355,7 +363,7 @@ async def get_integrity_flags_with_details(
                 review=review,
             )
         )
-    
+
     return flags
 
 
@@ -377,14 +385,14 @@ async def create_integrity_review(
             review_request.follow_up_action,
         ),
     )
-    
+
     # Get the review ID from the last inserted row
     review_id_result = await execute_db_operation(
         "SELECT last_insert_rowid()",
         fetch_one=True,
     )
     review_id = review_id_result[0] if review_id_result else None
-    
+
     # Update the flag status to reviewed
     await execute_db_operation(
         f"""
@@ -394,7 +402,7 @@ async def create_integrity_review(
         """,
         (IntegrityFlagStatus.REVIEWED.value, flag_id),
     )
-    
+
     return await get_integrity_review(review_id)
 
 
@@ -410,10 +418,10 @@ async def get_integrity_review(review_id: int) -> Optional[IntegrityReview]:
         (review_id,),
         fetch_one=True,
     )
-    
+
     if not row:
         return None
-    
+
     return IntegrityReview(
         id=row[0],
         flag_id=row[1],
@@ -431,7 +439,7 @@ async def get_user_integrity_timeline(
 ) -> List[IntegrityTimelineEntry]:
     """Get a timeline of integrity events and flags for a user."""
     timeline = []
-    
+
     # Get integrity events
     events_query = f"""
         SELECT created_at, event_type, event_data, confidence_score, 'event' as type
@@ -439,16 +447,18 @@ async def get_user_integrity_timeline(
         WHERE user_id = ?
     """
     events_params = [user_id]
-    
+
     if task_id:
         events_query += " AND task_id = ?"
         events_params.append(task_id)
-    
+
     events_query += " ORDER BY created_at DESC LIMIT ?"
     events_params.append(limit)
-    
-    events = await execute_db_operation(events_query, tuple(events_params), fetch_all=True)
-    
+
+    events = await execute_db_operation(
+        events_query, tuple(events_params), fetch_all=True
+    )
+
     for event in events:
         event_data = json.loads(event[2]) if event[2] else None
         timeline.append(
@@ -463,7 +473,7 @@ async def get_user_integrity_timeline(
                 },
             )
         )
-    
+
     # Get integrity flags
     flags_query = f"""
         SELECT created_at, flag_type, severity, confidence_score, ai_analysis, 'flag' as type
@@ -471,16 +481,16 @@ async def get_user_integrity_timeline(
         WHERE user_id = ?
     """
     flags_params = [user_id]
-    
+
     if task_id:
         flags_query += " AND task_id = ?"
         flags_params.append(task_id)
-    
+
     flags_query += " ORDER BY created_at DESC LIMIT ?"
     flags_params.append(limit)
-    
+
     flags = await execute_db_operation(flags_query, tuple(flags_params), fetch_all=True)
-    
+
     for flag in flags:
         timeline.append(
             IntegrityTimelineEntry(
@@ -495,10 +505,10 @@ async def get_user_integrity_timeline(
                 severity=flag[2],
             )
         )
-    
+
     # Sort timeline by timestamp descending
     timeline.sort(key=lambda x: x.timestamp, reverse=True)
-    
+
     return timeline[:limit]
 
 
@@ -510,7 +520,7 @@ async def get_integrity_dashboard_stats() -> IntegrityDashboardStats:
         fetch_one=True,
     )
     total_flags = total_flags_result[0] if total_flags_result else 0
-    
+
     # Pending flags
     pending_flags_result = await execute_db_operation(
         f"SELECT COUNT(*) FROM {integrity_flags_table_name} WHERE status = ?",
@@ -518,7 +528,7 @@ async def get_integrity_dashboard_stats() -> IntegrityDashboardStats:
         fetch_one=True,
     )
     pending_flags = pending_flags_result[0] if pending_flags_result else 0
-    
+
     # High severity flags
     high_severity_flags_result = await execute_db_operation(
         f"""SELECT COUNT(*) FROM {integrity_flags_table_name} 
@@ -526,18 +536,20 @@ async def get_integrity_dashboard_stats() -> IntegrityDashboardStats:
         (IntegritySeverity.HIGH.value, IntegritySeverity.CRITICAL.value),
         fetch_one=True,
     )
-    high_severity_flags = high_severity_flags_result[0] if high_severity_flags_result else 0
-    
+    high_severity_flags = (
+        high_severity_flags_result[0] if high_severity_flags_result else 0
+    )
+
     # Flags by type
     flags_by_type = await execute_db_operation(
         f"SELECT flag_type, COUNT(*) FROM {integrity_flags_table_name} GROUP BY flag_type",
         fetch_all=True,
     )
     flags_by_type_dict = {flag_type: count for flag_type, count in flags_by_type}
-    
+
     # Recent flags
     recent_flags = await get_integrity_flags_with_details(limit=10)
-    
+
     return IntegrityDashboardStats(
         total_flags=total_flags,
         pending_flags=pending_flags,
