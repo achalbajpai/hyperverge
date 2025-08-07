@@ -230,7 +230,7 @@ function CameraSetupContent() {
 
             <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                 {/* Instructions */}
-                <Card className="bg-[#1A1A1A] border-gray-700 mb-6 border-b-2 border-blue-500 border-opacity-70">
+                <Card className="bg-[#1A1A1A] mb-6 border-b-2 border-blue-500 border-opacity-70">
                     <CardHeader>
                         <CardTitle className="text-white flex items-center">
                             <Camera className="w-5 h-5 mr-2 text-blue-400" />
@@ -253,7 +253,7 @@ function CameraSetupContent() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Camera Feed */}
-                    <Card className="bg-[#1A1A1A] border-gray-700 border-b-2 border-green-500 border-opacity-70">
+                    <Card className="bg-[#1A1A1A] border-b-2 border-green-500 border-opacity-70">
                         <CardHeader>
                             <CardTitle className="text-white flex items-center">
                                 <Eye className="w-5 h-5 mr-2 text-green-400" />
@@ -296,7 +296,7 @@ function CameraSetupContent() {
                     </Card>
 
                     {/* Status & Controls */}
-                    <Card className="bg-[#1A1A1A] border-gray-700 border-b-2 border-purple-500 border-opacity-70">
+                    <Card className="bg-[#1A1A1A] border-b-2 border-purple-500 border-opacity-70">
                         <CardHeader>
                             <CardTitle className="text-white">Permission Status</CardTitle>
                         </CardHeader>
@@ -407,7 +407,7 @@ function CameraSetupContent() {
                 </div>
 
                 {/* Technical Requirements */}
-                <Card className="bg-[#1A1A1A] border-gray-700 mt-6 border-b-2 border-yellow-500 border-opacity-70">
+                <Card className="bg-[#1A1A1A] mt-6 border-b-2 border-yellow-500 border-opacity-70">
                     <CardHeader>
                         <CardTitle className="text-white flex items-center">
                             <AlertTriangle className="w-5 h-5 mr-2 text-yellow-400" />
