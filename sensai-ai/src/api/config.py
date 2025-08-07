@@ -55,6 +55,12 @@ task_generation_jobs_table_name = "task_generation_jobs"
 org_api_keys_table_name = "org_api_keys"
 code_drafts_table_name = "code_drafts"
 
+# Integrity system tables
+integrity_events_table_name = "integrity_events"
+proctoring_sessions_table_name = "proctoring_sessions"
+integrity_flags_table_name = "integrity_flags"
+integrity_reviews_table_name = "integrity_reviews"
+
 UPLOAD_FOLDER_NAME = "uploads"
 
 uncategorized_milestone_name = "[UNASSIGNED]"

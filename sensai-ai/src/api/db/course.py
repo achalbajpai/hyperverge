@@ -449,7 +449,7 @@ def drop_courses_table():
 
 
 async def get_tasks_for_course(course_id: int, milestone_id: int = None):
-    query = f"""SELECT t.id, t.name, COALESCE(m.name, '{uncategorized_milestone_name}') as milestone_name, t.verified, t.input_type, t.response_type, t.coding_language, ct.ordering, ct.id as course_task_id, ct.milestone_id, t.type
+    query = f"""SELECT t.id, t.title, COALESCE(m.name, '{uncategorized_milestone_name}') as milestone_name, t.status, t.type, ct.ordering, ct.id as course_task_id, ct.milestone_id
         FROM {tasks_table_name} t
         JOIN {course_tasks_table_name} ct ON ct.task_id = t.id 
         LEFT JOIN {milestones_table_name} m ON ct.milestone_id = m.id
@@ -472,16 +472,14 @@ async def get_tasks_for_course(course_id: int, milestone_id: int = None):
     return [
         {
             "id": task[0],
-            "name": task[1],
+            "title": task[1],
+            "name": task[1],  # Keep both for backward compatibility
             "milestone": task[2],
-            "verified": task[3],
-            "input_type": task[4],
-            "response_type": task[5],
-            "coding_language": json.loads(task[6]) if task[6] else [],
-            "ordering": task[7],
-            "course_task_id": task[8],
-            "milestone_id": task[9],
-            "type": task[10],
+            "status": task[3],
+            "type": task[4],
+            "ordering": task[5],
+            "course_task_id": task[6],
+            "milestone_id": task[7],
         }
         for task in tasks
     ]

@@ -705,3 +705,165 @@ class SaveCodeDraftRequest(BaseModel):
 class CodeDraft(BaseModel):
     id: int
     code: List[LanguageCodeDraft]
+
+
+# Integrity System Models
+
+class IntegrityEventType(str, Enum):
+    PASTE_BURST = "paste_burst"
+    TYPING_ANOMALY = "typing_anomaly"
+    ANSWER_SIMILARITY = "answer_similarity"
+    STYLE_DRIFT = "style_drift"
+    TAB_SWITCH = "tab_switch"
+    COPY_PASTE = "copy_paste"
+    RAPID_COMPLETION = "rapid_completion"
+
+    def __str__(self):
+        return self.value
+
+
+class IntegrityFlagType(str, Enum):
+    CONTENT_SIMILARITY = "content_similarity"
+    BEHAVIORAL_ANOMALY = "behavioral_anomaly"
+    PROCTORING_VIOLATION = "proctoring_violation"
+    TECHNICAL_IRREGULARITY = "technical_irregularity"
+
+    def __str__(self):
+        return self.value
+
+
+class IntegritySeverity(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+    def __str__(self):
+        return self.value
+
+
+class IntegrityFlagStatus(str, Enum):
+    PENDING = "pending"
+    REVIEWED = "reviewed"
+    DISMISSED = "dismissed"
+    ESCALATED = "escalated"
+
+    def __str__(self):
+        return self.value
+
+
+class ReviewDecision(str, Enum):
+    NO_VIOLATION = "no_violation"
+    MINOR_CONCERN = "minor_concern"
+    INTEGRITY_VIOLATION = "integrity_violation"
+    FURTHER_INVESTIGATION = "further_investigation"
+
+    def __str__(self):
+        return self.value
+
+
+class IntegrityEvent(BaseModel):
+    id: Optional[int] = None
+    user_id: int
+    session_id: Optional[str] = None
+    event_type: IntegrityEventType
+    event_data: Optional[Dict] = None
+    confidence_score: Optional[float] = None
+    question_id: Optional[int] = None
+    task_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+
+class CreateIntegrityEventRequest(BaseModel):
+    session_id: Optional[str] = None
+    event_type: IntegrityEventType
+    event_data: Optional[Dict] = None
+    confidence_score: Optional[float] = None
+    question_id: Optional[int] = None
+    task_id: Optional[int] = None
+
+
+class ProctoringSession(BaseModel):
+    id: Optional[int] = None
+    session_id: str
+    user_id: int
+    task_id: Optional[int] = None
+    question_id: Optional[int] = None
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    session_data: Optional[Dict] = None
+    integrity_score: Optional[float] = None
+
+
+class StartProctoringSessionRequest(BaseModel):
+    task_id: Optional[int] = None
+    question_id: Optional[int] = None
+    session_data: Optional[Dict] = None
+
+
+class IntegrityFlag(BaseModel):
+    id: int
+    user_id: int
+    session_id: Optional[str] = None
+    flag_type: IntegrityFlagType
+    severity: IntegritySeverity
+    confidence_score: float
+    evidence_data: Optional[Dict] = None
+    ai_analysis: Optional[str] = None
+    question_id: Optional[int] = None
+    task_id: Optional[int] = None
+    status: IntegrityFlagStatus
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+
+
+class CreateIntegrityFlagRequest(BaseModel):
+    session_id: Optional[str] = None
+    flag_type: IntegrityFlagType
+    severity: IntegritySeverity
+    confidence_score: float
+    evidence_data: Optional[Dict] = None
+    ai_analysis: Optional[str] = None
+    question_id: Optional[int] = None
+    task_id: Optional[int] = None
+
+
+class IntegrityReview(BaseModel):
+    id: int
+    flag_id: int
+    reviewer_user_id: int
+    decision: ReviewDecision
+    notes: Optional[str] = None
+    follow_up_action: Optional[str] = None
+    follow_up_completed: bool = False
+    reviewed_at: datetime
+
+
+class CreateIntegrityReviewRequest(BaseModel):
+    decision: ReviewDecision
+    notes: Optional[str] = None
+    follow_up_action: Optional[str] = None
+
+
+class IntegrityFlagWithDetails(IntegrityFlag):
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    task_title: Optional[str] = None
+    question_title: Optional[str] = None
+    review: Optional[IntegrityReview] = None
+
+
+class IntegrityTimelineEntry(BaseModel):
+    timestamp: datetime
+    event_type: str
+    description: str
+    data: Optional[Dict] = None
+    severity: Optional[str] = None
+
+
+class IntegrityDashboardStats(BaseModel):
+    total_flags: int
+    pending_flags: int
+    high_severity_flags: int
+    flags_by_type: Dict[str, int]
+    recent_flags: List[IntegrityFlagWithDetails]

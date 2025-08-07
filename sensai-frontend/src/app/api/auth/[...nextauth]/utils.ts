@@ -26,7 +26,10 @@ export async function registerUserWithBackend(
   account: AccountData
 ): Promise<any> {
   try {    
-    const response = await fetch(`${process.env.BACKEND_URL}/auth/login`, {
+    const backendUrl = process.env.BACKEND_URL;
+    console.log('Backend URL:', backendUrl); // Debug log
+    
+    const response = await fetch(`${backendUrl}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -40,11 +43,14 @@ export async function registerUserWithBackend(
     });
 
     if (!response.ok) {
-      throw new Error(`Backend auth failed: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`Backend auth failed: ${response.status} - ${errorText}`);
+      throw new Error(`Backend auth failed: ${response.status} - ${errorText}`);
     }
 
     // Return the raw response data - assuming it contains an 'id' field directly
     const data = await response.json();
+    console.log('Backend response:', data); // Debug log
     
     // Make sure the ID exists and is returned properly
     if (!data.id) {
@@ -54,6 +60,7 @@ export async function registerUserWithBackend(
     return data;
   } catch (error) {
     console.error('Backend authentication error:', error);
+    console.error('Error details:', error.message, error.stack);
     // Don't throw error to prevent blocking the auth flow
     // Just log it and continue
     return { id: null };

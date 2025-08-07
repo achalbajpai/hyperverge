@@ -27,6 +27,10 @@ from api.config import (
     task_generation_jobs_table_name,
     org_api_keys_table_name,
     code_drafts_table_name,
+    integrity_events_table_name,
+    proctoring_sessions_table_name,
+    integrity_flags_table_name,
+    integrity_reviews_table_name,
 )
 
 
@@ -462,6 +466,124 @@ async def create_code_drafts_table(cursor):
     )
 
 
+async def create_integrity_events_table(cursor):
+    await cursor.execute(
+        f"""CREATE TABLE IF NOT EXISTS {integrity_events_table_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                session_id TEXT,
+                event_type TEXT NOT NULL,
+                event_data TEXT,
+                confidence_score REAL,
+                question_id INTEGER,
+                task_id INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES {users_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (question_id) REFERENCES {questions_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (task_id) REFERENCES {tasks_table_name}(id) ON DELETE CASCADE
+            )"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_integrity_events_user_id ON {integrity_events_table_name} (user_id)"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_integrity_events_session_id ON {integrity_events_table_name} (session_id)"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_integrity_events_type ON {integrity_events_table_name} (event_type)"""
+    )
+
+
+async def create_proctoring_sessions_table(cursor):
+    await cursor.execute(
+        f"""CREATE TABLE IF NOT EXISTS {proctoring_sessions_table_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL UNIQUE,
+                user_id INTEGER NOT NULL,
+                task_id INTEGER,
+                question_id INTEGER,
+                started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ended_at DATETIME,
+                session_data TEXT,
+                integrity_score REAL,
+                FOREIGN KEY (user_id) REFERENCES {users_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (task_id) REFERENCES {tasks_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (question_id) REFERENCES {questions_table_name}(id) ON DELETE CASCADE
+            )"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_proctoring_sessions_user_id ON {proctoring_sessions_table_name} (user_id)"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_proctoring_sessions_session_id ON {proctoring_sessions_table_name} (session_id)"""
+    )
+
+
+async def create_integrity_flags_table(cursor):
+    await cursor.execute(
+        f"""CREATE TABLE IF NOT EXISTS {integrity_flags_table_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                session_id TEXT,
+                flag_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                confidence_score REAL NOT NULL,
+                evidence_data TEXT,
+                ai_analysis TEXT,
+                question_id INTEGER,
+                task_id INTEGER,
+                status TEXT DEFAULT 'pending',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                reviewed_at DATETIME,
+                FOREIGN KEY (user_id) REFERENCES {users_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (question_id) REFERENCES {questions_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (task_id) REFERENCES {tasks_table_name}(id) ON DELETE CASCADE
+            )"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_integrity_flags_user_id ON {integrity_flags_table_name} (user_id)"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_integrity_flags_status ON {integrity_flags_table_name} (status)"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_integrity_flags_severity ON {integrity_flags_table_name} (severity)"""
+    )
+
+
+async def create_integrity_reviews_table(cursor):
+    await cursor.execute(
+        f"""CREATE TABLE IF NOT EXISTS {integrity_reviews_table_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                flag_id INTEGER NOT NULL,
+                reviewer_user_id INTEGER NOT NULL,
+                decision TEXT NOT NULL,
+                notes TEXT,
+                follow_up_action TEXT,
+                follow_up_completed BOOLEAN DEFAULT FALSE,
+                reviewed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (flag_id) REFERENCES {integrity_flags_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (reviewer_user_id) REFERENCES {users_table_name}(id) ON DELETE CASCADE
+            )"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_integrity_reviews_flag_id ON {integrity_reviews_table_name} (flag_id)"""
+    )
+
+    await cursor.execute(
+        f"""CREATE INDEX IF NOT EXISTS idx_integrity_reviews_reviewer ON {integrity_reviews_table_name} (reviewer_user_id)"""
+    )
+
+
 async def init_db():
     # Ensure the database folder exists
     db_folder = os.path.dirname(sqlite_db_path)
@@ -478,6 +600,19 @@ async def init_db():
         if exists(sqlite_db_path):
             if not await check_table_exists(code_drafts_table_name, cursor):
                 await create_code_drafts_table(cursor)
+
+            # Check and create integrity system tables if they don't exist
+            if not await check_table_exists(integrity_events_table_name, cursor):
+                await create_integrity_events_table(cursor)
+
+            if not await check_table_exists(proctoring_sessions_table_name, cursor):
+                await create_proctoring_sessions_table(cursor)
+
+            if not await check_table_exists(integrity_flags_table_name, cursor):
+                await create_integrity_flags_table(cursor)
+
+            if not await check_table_exists(integrity_reviews_table_name, cursor):
+                await create_integrity_reviews_table(cursor)
 
             await conn.commit()
             return
@@ -520,6 +655,15 @@ async def init_db():
             await create_task_generation_jobs_table(cursor)
 
             await create_code_drafts_table(cursor)
+
+            # Create integrity system tables
+            await create_integrity_events_table(cursor)
+
+            await create_proctoring_sessions_table(cursor)
+
+            await create_integrity_flags_table(cursor)
+
+            await create_integrity_reviews_table(cursor)
 
             await conn.commit()
 
