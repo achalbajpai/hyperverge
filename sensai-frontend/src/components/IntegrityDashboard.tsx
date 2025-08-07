@@ -123,21 +123,21 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
 
     const getSeverityColor = (severity: IntegritySeverity) => {
         switch (severity) {
-            case IntegritySeverity.CRITICAL: return 'text-destructive bg-destructive/10';
-            case IntegritySeverity.HIGH: return 'text-orange-600 bg-orange-50';
-            case IntegritySeverity.MEDIUM: return 'text-yellow-600 bg-yellow-50';
-            case IntegritySeverity.LOW: return 'text-primary bg-primary/10';
-            default: return 'text-muted-foreground bg-muted';
+            case IntegritySeverity.CRITICAL: return 'text-red-300 bg-red-900 border border-red-500';
+            case IntegritySeverity.HIGH: return 'text-orange-300 bg-orange-900 border border-orange-500';
+            case IntegritySeverity.MEDIUM: return 'text-yellow-300 bg-yellow-900 border border-yellow-500';
+            case IntegritySeverity.LOW: return 'text-blue-300 bg-blue-900 border border-blue-500';
+            default: return 'text-gray-300 bg-gray-800 border border-gray-500';
         }
     };
 
     const getStatusColor = (status: IntegrityFlagStatus) => {
         switch (status) {
-            case IntegrityFlagStatus.PENDING: return 'text-yellow-600 bg-yellow-50';
-            case IntegrityFlagStatus.REVIEWED: return 'text-green-600 bg-green-50';
-            case IntegrityFlagStatus.DISMISSED: return 'text-muted-foreground bg-muted';
-            case IntegrityFlagStatus.ESCALATED: return 'text-destructive bg-destructive/10';
-            default: return 'text-muted-foreground bg-muted';
+            case IntegrityFlagStatus.PENDING: return 'text-yellow-300 bg-yellow-900 border border-yellow-500';
+            case IntegrityFlagStatus.REVIEWED: return 'text-green-300 bg-green-900 border border-green-500';
+            case IntegrityFlagStatus.DISMISSED: return 'text-gray-300 bg-gray-800 border border-gray-500';
+            case IntegrityFlagStatus.ESCALATED: return 'text-red-300 bg-red-900 border border-red-500';
+            default: return 'text-gray-300 bg-gray-800 border border-gray-500';
         }
     };
 
@@ -148,190 +148,178 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
     if (loading && !stats) {
         return (
             <div className="flex items-center justify-center h-64">
-                <div className="text-lg">Loading integrity dashboard...</div>
+                <div className="text-lg text-white">Loading integrity dashboard...</div>
             </div>
         );
     }
 
     return (
-        <div className="p-6 bg-background min-h-screen">
-            <div className="max-w-7xl mx-auto space-y-6">
-                {/* Header */}
-                <div className="flex justify-between items-center">
-                    <h1 className="text-3xl font-bold text-foreground">Integrity Dashboard</h1>
-                    <Button onClick={() => { fetchStats(); fetchFlags(); }} className="flex items-center gap-2">
-                        <RefreshCcw className="h-4 w-4" />
-                        Refresh
-                    </Button>
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-light text-white">Integrity Dashboard</h1>
+                <Button onClick={() => { fetchStats(); fetchFlags(); }} className="flex items-center gap-2">
+                    <RefreshCcw className="h-4 w-4" />
+                    Refresh
+                </Button>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+                <div className="bg-red-900 border border-red-500 text-red-300 px-4 py-3 rounded">
+                    {error}
+                    <button onClick={() => setError(null)} className="float-right text-red-300 hover:text-red-200">×</button>
+                </div>
+            )}
+
+            {/* Stats Cards */}
+            {stats && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-red-500 border-opacity-70">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-400">Total Flags</p>
+                                <p className="text-2xl font-light text-white">{stats.total_flags}</p>
+                            </div>
+                            <AlertTriangle className="h-8 w-8 text-red-400" />
+                        </div>
+                    </div>
+
+                    <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-yellow-500 border-opacity-70">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-400">Pending Review</p>
+                                <p className="text-2xl font-light text-white">{stats.pending_flags}</p>
+                            </div>
+                            <Clock className="h-8 w-8 text-yellow-400" />
+                        </div>
+                    </div>
+
+                    <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-orange-500 border-opacity-70">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-400">High Priority</p>
+                                <p className="text-2xl font-light text-white">{stats.high_severity_flags}</p>
+                            </div>
+                            <XCircle className="h-8 w-8 text-orange-400" />
+                        </div>
+                    </div>
+
+                    <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-green-500 border-opacity-70">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-400">Resolution Rate</p>
+                                <p className="text-2xl font-light text-white">
+                                    {stats.total_flags > 0 ? Math.round(((stats.total_flags - stats.pending_flags) / stats.total_flags) * 100) : 0}%
+                                </p>
+                            </div>
+                            <CheckCircle className="h-8 w-8 text-green-400" />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Filters */}
+            <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-4 border-b-2 border-blue-500 border-opacity-70">
+                <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4" />
+                        <span className="font-medium">Filters:</span>
+                    </div>
+
+                    <select
+                        value={filters.status}
+                        onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as any }))}
+                        className="border rounded px-3 py-1"
+                    >
+                        <option value="">All Statuses</option>
+                        <option value={IntegrityFlagStatus.PENDING}>Pending</option>
+                        <option value={IntegrityFlagStatus.REVIEWED}>Reviewed</option>
+                        <option value={IntegrityFlagStatus.DISMISSED}>Dismissed</option>
+                        <option value={IntegrityFlagStatus.ESCALATED}>Escalated</option>
+                    </select>
+
+                    <select
+                        value={filters.severity}
+                        onChange={(e) => setFilters(prev => ({ ...prev, severity: e.target.value as any }))}
+                        className="border rounded px-3 py-1"
+                    >
+                        <option value="">All Severities</option>
+                        <option value={IntegritySeverity.CRITICAL}>Critical</option>
+                        <option value={IntegritySeverity.HIGH}>High</option>
+                        <option value={IntegritySeverity.MEDIUM}>Medium</option>
+                        <option value={IntegritySeverity.LOW}>Low</option>
+                    </select>
+
+                    <select
+                        value={filters.flagType}
+                        onChange={(e) => setFilters(prev => ({ ...prev, flagType: e.target.value as any }))}
+                        className="border rounded px-3 py-1"
+                    >
+                        <option value="">All Types</option>
+                        <option value={IntegrityFlagType.CONTENT_SIMILARITY}>Content Similarity</option>
+                        <option value={IntegrityFlagType.BEHAVIORAL_ANOMALY}>Behavioral Anomaly</option>
+                        <option value={IntegrityFlagType.PROCTORING_VIOLATION}>Proctoring Violation</option>
+                        <option value={IntegrityFlagType.TECHNICAL_IRREGULARITY}>Technical Irregularity</option>
+                    </select>
+
+                    {(filters.status || filters.severity || filters.flagType) && (
+                        <Button
+                            onClick={() => setFilters({ status: '', severity: '', flagType: '' })}
+                            variant="outline"
+                            size="sm"
+                        >
+                            Clear Filters
+                        </Button>
+                    )}
+                </div>
                 </div>
 
-                {/* Error Message */}
-                {error && (
-                    <div className="bg-destructive/15 border border-destructive/20 text-destructive px-4 py-3 rounded">
-                        {error}
-                        <button onClick={() => setError(null)} className="float-right text-destructive hover:text-destructive/80">×</button>
-                    </div>
-                )}
-
-                {/* Stats Cards */}
-                {stats && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <Card>
-                            <CardContent className="p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">Total Flags</p>
-                                        <p className="text-2xl font-bold text-foreground">{stats.total_flags}</p>
-                                    </div>
-                                    <AlertTriangle className="h-8 w-8 text-muted-foreground" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardContent className="p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
-                                        <p className="text-2xl font-bold text-yellow-600">{stats.pending_flags}</p>
-                                    </div>
-                                    <Clock className="h-8 w-8 text-muted-foreground" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardContent className="p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">High Priority</p>
-                                        <p className="text-2xl font-bold text-destructive">{stats.high_severity_flags}</p>
-                                    </div>
-                                    <XCircle className="h-8 w-8 text-muted-foreground" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardContent className="p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">Resolution Rate</p>
-                                        <p className="text-2xl font-bold text-green-600">
-                                            {stats.total_flags > 0 ? Math.round(((stats.total_flags - stats.pending_flags) / stats.total_flags) * 100) : 0}%
-                                        </p>
-                                    </div>
-                                    <CheckCircle className="h-8 w-8 text-muted-foreground" />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )}
-
-                {/* Filters */}
-                <Card>
-                    <CardContent className="p-4">
-                        <div className="flex items-center gap-4 flex-wrap">
-                            <div className="flex items-center gap-2">
-                                <Filter className="h-4 w-4" />
-                                <span className="font-medium">Filters:</span>
-                            </div>
-
-                            <select
-                                value={filters.status}
-                                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as any }))}
-                                className="border rounded px-3 py-1"
-                            >
-                            <option value="">All Statuses</option>
-                            <option value={IntegrityFlagStatus.PENDING}>Pending</option>
-                            <option value={IntegrityFlagStatus.REVIEWED}>Reviewed</option>
-                            <option value={IntegrityFlagStatus.DISMISSED}>Dismissed</option>
-                            <option value={IntegrityFlagStatus.ESCALATED}>Escalated</option>
-                        </select>
-
-                            <select
-                                value={filters.severity}
-                                onChange={(e) => setFilters(prev => ({ ...prev, severity: e.target.value as any }))}
-                                className="border rounded px-3 py-1"
-                            >
-                                <option value="">All Severities</option>
-                                <option value={IntegritySeverity.CRITICAL}>Critical</option>
-                                <option value={IntegritySeverity.HIGH}>High</option>
-                                <option value={IntegritySeverity.MEDIUM}>Medium</option>
-                                <option value={IntegritySeverity.LOW}>Low</option>
-                            </select>
-
-                            <select
-                                value={filters.flagType}
-                                onChange={(e) => setFilters(prev => ({ ...prev, flagType: e.target.value as any }))}
-                                className="border rounded px-3 py-1"
-                            >
-                            <option value="">All Types</option>
-                            <option value={IntegrityFlagType.CONTENT_SIMILARITY}>Content Similarity</option>
-                            <option value={IntegrityFlagType.BEHAVIORAL_ANOMALY}>Behavioral Anomaly</option>
-                            <option value={IntegrityFlagType.PROCTORING_VIOLATION}>Proctoring Violation</option>
-                            <option value={IntegrityFlagType.TECHNICAL_IRREGULARITY}>Technical Irregularity</option>
-                        </select>
-
-                            {(filters.status || filters.severity || filters.flagType) && (
-                                <Button
-                                    onClick={() => setFilters({ status: '', severity: '', flagType: '' })}
-                                    variant="outline"
-                                    size="sm"
-                                >
-                                    Clear Filters
-                                </Button>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Flags Table */}
-                <Card className="overflow-hidden">
-                    <CardHeader>
-                        <CardTitle>Integrity Flags</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+            {/* Flags Table */}
+            <div className="bg-[#1A1A1A] text-gray-300 rounded-lg border-b-2 border-purple-500 border-opacity-70 overflow-hidden">
+                <div className="p-6 border-b border-gray-700">
+                    <h3 className="text-xl font-light text-white">Integrity Flags</h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-700">
+                            <thead className="bg-gray-800">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                         User
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                         Type
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                         Severity
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                         Confidence
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                         Status
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                         Created
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                         Actions
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-gray-900 divide-y divide-gray-700">
                                 {flags.map((flag) => (
-                                    <tr key={flag.id} className="hover:bg-gray-50">
+                                    <tr key={flag.id} className="hover:bg-gray-800">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div>
-                                                <div className="text-sm font-medium text-gray-900">
+                                                <div className="text-sm font-light text-white">
                                                     {flag.user_name || 'Unknown User'}
                                                 </div>
-                                                <div className="text-sm text-gray-500">{flag.user_email}</div>
+                                                <div className="text-sm text-gray-400">{flag.user_email}</div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="text-sm text-gray-900 capitalize">
+                                            <span className="text-sm text-gray-300 capitalize">
                                                 {flag.flag_type.replace('_', ' ')}
                                             </span>
                                         </td>
@@ -340,7 +328,7 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                                 {flag.severity}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                                             {Math.round(flag.confidence_score * 100)}%
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -348,7 +336,7 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                                 {flag.status}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                                             {formatDate(flag.created_at)}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -368,15 +356,14 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                     </tr>
                                 ))}
                             </tbody>
-                        </table>
-                        </div>
-                    </CardContent>
-                </Card>
+                    </table>
+                </div>
+            </div>
 
-                {/* Review Modal */}
-                {showReviewModal && selectedFlag && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            {/* Review Modal */}
+            {showReviewModal && selectedFlag && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-xl font-bold">Review Integrity Flag</h2>
                                 <button
@@ -468,11 +455,10 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                 <Button onClick={submitReview}>
                                     Submit Review
                                 </Button>
-                            </div>
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     );
 }

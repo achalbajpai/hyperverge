@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import ProctoringInterface from '@/components/ProctoringInterface';
-import { ArrowLeft, Clock, Shield, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Clock, Shield, AlertTriangle, CheckCircle } from 'lucide-react';
 import { fetchAssignment, startProctoringSession, submitAssignmentCompletion } from '@/lib/student-api';
 import { useSession } from 'next-auth/react';
 
-export default function StudentAssessmentPage() {
+function AssessmentContent() {
     const { data: session } = useSession();
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -219,7 +219,7 @@ export default function StudentAssessmentPage() {
         const suspiciousPatterns = [
             { pattern: /copy|paste|ctrl\+c|ctrl\+v/i, type: 'copy_paste_reference' },
             { pattern: /stackoverflow|github|chatgpt/i, type: 'external_source_reference' },
-            { pattern: /.{500,}/s, type: 'unusually_long_answer' }, // Very long answers
+            { pattern: /.{500,}/, type: 'unusually_long_answer' }, // Very long answers
         ];
 
         let flagsToCreate = [];
@@ -301,57 +301,66 @@ export default function StudentAssessmentPage() {
 
     if (isSubmitted) {
         return (
-            <div className="container mx-auto py-8">
-                <Card className="max-w-2xl mx-auto">
-                    <CardContent className="p-8 text-center">
-                        <h2 className="text-2xl font-bold mb-4">Assessment Submitted Successfully! ✅</h2>
-                        <p className="text-gray-600 mb-4">
-                            Your answers have been submitted and are being processed for integrity analysis.
-                        </p>
-                        <p className="text-sm text-gray-500">
-                            Session ID: {sessionId?.substring(0, 8)}...
-                        </p>
-                        <div className="mt-6">
-                            <Button onClick={() => window.location.href = '/test-integrity'}>
-                                View Admin Dashboard
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+            <div className="min-h-screen flex items-center justify-center bg-black">
+                <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-8 border-b-2 border-green-500 border-opacity-70 max-w-2xl mx-auto text-center">
+                    <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
+                    <h2 className="text-2xl font-light text-white mb-4">Assessment Submitted Successfully!</h2>
+                    <p className="text-gray-400 mb-4">
+                        Your answers have been submitted and are being processed for integrity analysis.
+                    </p>
+                    <p className="text-sm text-gray-500 mb-6">
+                        Session ID: {sessionId?.substring(0, 8)}...
+                    </p>
+                    <div className="space-y-3">
+                        <Button 
+                            onClick={() => router.push('/student')}
+                            className="w-full"
+                        >
+                            Return to Dashboard
+                        </Button>
+                        <Button 
+                            variant="outline"
+                            onClick={() => window.location.href = '/test-integrity'}
+                            className="w-full border-gray-600 text-gray-300 hover:bg-gray-700"
+                        >
+                            View Admin Dashboard
+                        </Button>
+                    </div>
+                </div>
             </div>
         );
     }
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+            <div className="min-h-screen flex items-center justify-center bg-black">
+                <div className="w-12 h-12 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-black">
             {/* Assessment Header */}
-            <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="bg-[#1A1A1A] border-b border-gray-800 sticky top-0 z-10">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center py-4">
                         <div className="flex items-center space-x-4">
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => router.push('/student')}
-                                className="text-gray-600 hover:text-gray-800"
+                                className="text-gray-400 hover:text-gray-200"
                             >
                                 <ArrowLeft className="w-4 h-4 mr-2" />
                                 Back to Dashboard
                             </Button>
-                            <div className="h-6 w-px bg-gray-300"></div>
+                            <div className="h-6 w-px bg-gray-600"></div>
                             <div>
-                                <h1 className="text-xl font-semibold text-gray-900">
+                                <h1 className="text-xl font-light text-white">
                                     {assignmentTitle || assessmentData?.title || 'Programming Assessment'}
                                 </h1>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm text-gray-400">
                                     {courseId || assessmentData?.course_title || 'Computer Science Fundamentals'}
                                 </p>
                             </div>
@@ -359,18 +368,18 @@ export default function StudentAssessmentPage() {
                         
                         <div className="flex items-center space-x-4">
                             {/* Integrity monitoring indicator */}
-                            <div className="flex items-center space-x-2 text-sm text-purple-600">
+                            <div className="flex items-center space-x-2 text-sm text-purple-400">
                                 <Shield className="w-4 h-4" />
                                 <span>Proctored</span>
                             </div>
                             
                             {/* Question progress */}
-                            <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                            <div className="text-sm text-gray-300 bg-gray-800 px-3 py-1 rounded-full">
                                 Question {currentQuestion + 1} of {questions.length}
                             </div>
                             
                             {/* Timer */}
-                            <div className="flex items-center space-x-2 text-sm text-blue-600">
+                            <div className="flex items-center space-x-2 text-sm text-blue-400">
                                 <Clock className="w-4 h-4" />
                                 <span>
                                     {Math.floor((new Date().getTime() - startTime.getTime()) / 60000)} min
@@ -390,69 +399,80 @@ export default function StudentAssessmentPage() {
                 />
 
                 <div className="max-w-4xl mx-auto">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>{questions[currentQuestion].title}</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                <p className="text-gray-700">
-                                    {questions[currentQuestion].question}
+                    <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-indigo-500 border-opacity-70">
+                        <div className="mb-6">
+                            <h2 className="text-xl font-light text-white mb-4">{questions[currentQuestion].title}</h2>
+                        </div>
+                        <div className="space-y-4">
+                            <p className="text-gray-300">
+                                {questions[currentQuestion].question}
+                            </p>
+                            
+                            <div>
+                                <label className="block text-sm font-light text-white mb-2">
+                                    Your Answer:
+                                </label>
+                                <textarea
+                                    className="w-full h-48 p-4 border border-gray-600 rounded-lg bg-gray-800 text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="Type your answer here..."
+                                    value={answers[currentQuestion] || ''}
+                                    onChange={(e) => handleAnswerChange(e.target.value, currentQuestion)}
+                                    onPaste={(e) => handlePaste(e, currentQuestion)}
+                                />
+                                <p className="text-sm text-gray-400 mt-1">
+                                    Expected time: {questions[currentQuestion].expected_time} minutes
                                 </p>
-                                
-                                <div>
-                                    <label className="block text-sm font-medium mb-2">
-                                        Your Answer:
-                                    </label>
-                                    <textarea
-                                        className="w-full h-48 p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        placeholder="Type your answer here..."
-                                        value={answers[currentQuestion] || ''}
-                                        onChange={(e) => handleAnswerChange(e.target.value, currentQuestion)}
-                                        onPaste={(e) => handlePaste(e, currentQuestion)}
-                                    />
-                                    <p className="text-sm text-gray-500 mt-1">
-                                        Expected time: {questions[currentQuestion].expected_time} minutes
-                                    </p>
-                                </div>
                             </div>
+                        </div>
 
-                            <div className="flex justify-between mt-6">
+                        <div className="flex justify-between mt-6">
+                            <Button
+                                variant="outline"
+                                disabled={currentQuestion === 0}
+                                onClick={() => setCurrentQuestion(currentQuestion - 1)}
+                                className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                            >
+                                Previous
+                            </Button>
+                            
+                            {currentQuestion < questions.length - 1 ? (
                                 <Button
-                                    variant="outline"
-                                    disabled={currentQuestion === 0}
-                                    onClick={() => setCurrentQuestion(currentQuestion - 1)}
+                                    onClick={() => setCurrentQuestion(currentQuestion + 1)}
                                 >
-                                    Previous
+                                    Next Question
                                 </Button>
-                                
-                                {currentQuestion < questions.length - 1 ? (
-                                    <Button
-                                        onClick={() => setCurrentQuestion(currentQuestion + 1)}
-                                    >
-                                        Next Question
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        onClick={handleSubmit}
-                                        className="bg-green-600 hover:bg-green-700"
-                                    >
-                                        Submit Assessment
-                                    </Button>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
+                            ) : (
+                                <Button
+                                    onClick={handleSubmit}
+                                    className="bg-green-600 hover:bg-green-700"
+                                >
+                                    Submit Assessment
+                                </Button>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Progress indicator */}
-                    <div className="mt-4 bg-gray-200 rounded-full h-2">
+                    <div className="mt-4 bg-gray-700 rounded-full h-2">
                         <div
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            className="bg-indigo-500 h-2 rounded-full transition-all duration-300"
                             style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
                         />
                     </div>
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function StudentAssessmentPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-black">
+                <div className="w-12 h-12 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
+            </div>
+        }>
+            <AssessmentContent />
+        </Suspense>
     );
 }

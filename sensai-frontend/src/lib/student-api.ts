@@ -86,7 +86,7 @@ export async function fetchUserCourses(userId: number): Promise<Course[]> {
                         const tasks = await tasksResponse.json();
                         console.log(`Tasks for course ${course.id}:`, tasks);
                         assignments = tasks.map((task: any) => ({
-                            id: task.id,
+                            id: task.course_task_id || (course.id * 1000 + task.id), // Create unique ID by combining course and task IDs
                             title: task.title || task.name,
                             description: `Complete this ${task.type.replace('_', ' ')} assignment`,
                             type: task.type,
@@ -225,7 +225,7 @@ export function createMockAssignments(): Course[] {
             org_id: 1,
             assignments: [
                 {
-                    id: 1,
+                    id: 1001, // course_id * 1000 + 1
                     title: "Database Normalization",
                     description: "Understanding 2NF and 3NF with practical examples",
                     type: "quiz",
@@ -243,7 +243,7 @@ export function createMockAssignments(): Course[] {
                     milestone_id: 1
                 },
                 {
-                    id: 2,
+                    id: 1002, // course_id * 1000 + 2
                     title: "Algorithm Complexity Analysis",
                     description: "Big O notation and time complexity analysis",
                     type: "quiz",
@@ -261,7 +261,7 @@ export function createMockAssignments(): Course[] {
                     milestone_id: 2
                 },
                 {
-                    id: 3,
+                    id: 1003, // course_id * 1000 + 3
                     title: "React Hooks Deep Dive",
                     description: "Understanding useEffect, useState, and custom hooks",
                     type: "learning_material",
@@ -285,7 +285,7 @@ export function createMockAssignments(): Course[] {
             org_id: 1,
             assignments: [
                 {
-                    id: 4,
+                    id: 2001, // course_id * 1000 + 1
                     title: "Full Stack Project",
                     description: "Build a complete web application with authentication",
                     type: "project" as any,

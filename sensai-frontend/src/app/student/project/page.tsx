@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { ArrowLeft, Code, Upload, Download, Save, Play, Shield } from 'lucide-re
 import { fetchAssignment, type Assignment } from '@/lib/student-api';
 import ProctoringInterface from '@/components/ProctoringInterface';
 
-export default function StudentProjectPage() {
+function ProjectContent() {
     const { data: session } = useSession();
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -97,50 +97,48 @@ export default function StudentProjectPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+            <div className="min-h-screen flex items-center justify-center bg-black">
+                <div className="w-12 h-12 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
             </div>
         );
     }
 
     if (!assignment) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Card className="max-w-md mx-auto">
-                    <CardContent className="text-center py-8">
-                        <h2 className="text-xl font-semibold mb-2">Assignment Not Found</h2>
-                        <p className="text-gray-600 mb-4">The requested assignment could not be loaded.</p>
-                        <Button onClick={() => router.push('/student')}>
-                            Back to Dashboard
-                        </Button>
-                    </CardContent>
-                </Card>
+            <div className="min-h-screen flex items-center justify-center bg-black">
+                <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-8 border-b-2 border-red-500 border-opacity-70 max-w-md mx-auto text-center">
+                    <h2 className="text-xl font-light text-white mb-2">Assignment Not Found</h2>
+                    <p className="text-gray-400 mb-4">The requested assignment could not be loaded.</p>
+                    <Button onClick={() => router.push('/student')}>
+                        Back to Dashboard
+                    </Button>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-black">
             {/* Header */}
-            <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="bg-[#1A1A1A] border-b border-gray-800 sticky top-0 z-10">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center py-4">
                         <div className="flex items-center space-x-4">
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => router.push('/student')}
-                                className="text-gray-600 hover:text-gray-800"
+                                className="text-gray-400 hover:text-gray-200"
                             >
                                 <ArrowLeft className="w-4 h-4 mr-2" />
                                 Back to Dashboard
                             </Button>
-                            <div className="h-6 w-px bg-gray-300"></div>
+                            <div className="h-6 w-px bg-gray-600"></div>
                             <div>
-                                <h1 className="text-xl font-semibold text-gray-900">
+                                <h1 className="text-xl font-light text-white">
                                     {assignment.title}
                                 </h1>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm text-gray-400">
                                     {assignment.courseTitle} • {assignment.milestoneTitle}
                                 </p>
                             </div>
@@ -148,14 +146,14 @@ export default function StudentProjectPage() {
                         
                         <div className="flex items-center space-x-4">
                             {assignment.integrityEnabled && (
-                                <div className="flex items-center space-x-2 text-sm text-purple-600">
+                                <div className="flex items-center space-x-2 text-sm text-purple-400">
                                     <Shield className="w-4 h-4" />
                                     <span>Proctored</span>
                                 </div>
                             )}
                             
                             {isSubmitted && (
-                                <span className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-full">
+                                <span className="px-3 py-1 text-sm bg-green-900 text-green-300 border border-green-500 rounded-full">
                                     Submitted
                                 </span>
                             )}
@@ -317,5 +315,17 @@ export default function StudentProjectPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function StudentProjectPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-black">
+                <div className="w-12 h-12 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
+            </div>
+        }>
+            <ProjectContent />
+        </Suspense>
     );
 }
