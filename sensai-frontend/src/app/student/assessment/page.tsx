@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import ProctoringInterface from '@/components/ProctoringInterface';
+import VisualProctoringInterface from '@/components/VisualProctoringInterface';
 import { ArrowLeft, Clock, Shield, AlertTriangle, CheckCircle, Camera, Mic, Eye } from 'lucide-react';
 import { fetchAssignment, startProctoringSession, submitAssignmentCompletion } from '@/lib/student-api';
 import { useSession } from 'next-auth/react';
@@ -1112,12 +1113,34 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                     </div>
                 )}
 
-                {/* Proctoring Interface - minimized mode */}
+                {/* Proctoring Interfaces - minimized mode */}
                 <ProctoringInterface
                     taskId={parseInt(assignmentId || '1')}
                     questionId={questions[currentQuestion]?.id}
                     minimized={true}
                 />
+                
+                {/* Visual Proctoring Interface - Always show for integrity enabled assessments */}
+                {assessmentData?.integrityEnabled && sessionId && (
+                    <VisualProctoringInterface
+                        sessionId={sessionId}
+                        userId={parseInt(session?.user?.id || '1')}
+                        onFlagDetected={(flag) => {
+                            // Add visual proctoring flags to warnings
+                            if (flag.severity !== 'low') {
+                                addWarning(`🎥 VISUAL ALERT: ${flag.message}`);
+                            }
+                            
+                            // Log critical violations
+                            if (flag.severity === 'critical') {
+                                console.error('🚨 CRITICAL VISUAL PROCTORING VIOLATION:', flag);
+                            }
+                        }}
+                        minimized={true}
+                        autoStart={true}
+                        className=""
+                    />
+                )}
 
                 <div className="max-w-4xl mx-auto">
                     <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-indigo-500 border-opacity-70">

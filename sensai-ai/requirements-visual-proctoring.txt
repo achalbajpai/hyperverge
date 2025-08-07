@@ -1,0 +1,19 @@
+# Visual Proctoring Dependencies
+# Computer vision and machine learning
+opencv-python==4.8.1.78
+mediapipe==0.10.7
+numpy==1.24.3
+
+# YOLO object detection (optional but recommended)
+ultralytics==8.0.200
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Image processing
+Pillow==10.0.1
+
+# Already included in main requirements.txt but needed for proctoring:
+# fastapi
+# websockets
+# pydantic
+# python-multipart

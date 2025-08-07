@@ -33,6 +33,15 @@ from api.routes import (
     follow_up,
 )
 
+# Visual proctoring routes
+try:
+    from api.routes import visual_proctoring
+    VISUAL_PROCTORING_AVAILABLE = True
+except ImportError as e:
+    print(f"Visual proctoring routes not available: {e}")
+    visual_proctoring = None
+    VISUAL_PROCTORING_AVAILABLE = False
+
 # Voice integrity routes (optional - will gracefully handle missing dependencies)
 try:
     from api.routes import voice_integrity
@@ -145,6 +154,12 @@ app.include_router(
 if VOICE_INTEGRITY_AVAILABLE and voice_integrity:
     app.include_router(
         voice_integrity.router, prefix="/voice-integrity", tags=["voice-integrity"]
+    )
+
+# Include visual proctoring routes if available
+if VISUAL_PROCTORING_AVAILABLE and visual_proctoring:
+    app.include_router(
+        visual_proctoring.router, prefix="/visual-proctoring", tags=["visual-proctoring"]
     )
 
 app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
