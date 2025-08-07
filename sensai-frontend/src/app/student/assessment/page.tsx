@@ -18,6 +18,7 @@ function AssessmentContent() {
     const [answers, setAnswers] = useState<string[]>(['', '', '']);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [startTime] = useState(new Date());
     const [assessmentData, setAssessmentData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -643,9 +644,18 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
         }
     };
 
-    // Submit assessment and trigger AI analysis
+    // Submit assessment and trigger comprehensive AI analysis for all answers
+    // This function will:
+    // 1. Stop proctoring (camera, audio, warnings)
+    // 2. End the proctoring session
+    // 3. Analyze ALL answers in parallel using both OpenAI and Nebius AI
+    // 4. Create integrity flags in the dashboard for any suspicious patterns
+    // 5. Mark assessment as submitted
     const handleSubmit = async () => {
-        if (!sessionId) return;
+        if (!sessionId || isSubmitting) return;
+
+        console.log('🚀 Starting assessment submission...');
+        setIsSubmitting(true);
 
         try {
             // Stop camera stream and voice monitoring
@@ -658,6 +668,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
             // Clear warning timers
             setWarnings([]);
 
+            console.log('🔄 Ending proctoring session...');
             // End the proctoring session
             await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/sessions/${sessionId}/end`, {
                 method: 'PUT',
@@ -667,25 +678,128 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                 })
             });
 
-            // Analyze each answer for potential integrity issues and plagiarism
+            console.log('✅ Proctoring session ended successfully');
+
+            // Analyze all answers for potential integrity issues and plagiarism
+            console.log('🔍 Starting comprehensive analysis for all answers...', { 
+                totalAnswers: answers.length,
+                nonEmptyAnswers: answers.filter(a => a.trim()).length 
+            });
+            
+            const analysisPromises = [];
             for (let i = 0; i < answers.length; i++) {
                 if (answers[i].trim()) {
-                    // Check plagiarism with OpenAI first
-                    const plagiarismResult = await checkPlagiarismWithOpenAI(answers[i], questions[i].title);
+                    // Create promise for parallel processing
+                    const analysisPromise = (async () => {
+                        try {
+                            console.log(`🔍 Starting analysis for question ${i + 1}...`);
+                            
+                            // Check plagiarism with OpenAI first (with timeout)
+                            const plagiarismResult = await Promise.race([
+                                checkPlagiarismWithOpenAI(answers[i], questions[i].title),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('OpenAI timeout')), 10000))
+                            ]);
+                            
+                            // Analyze answer with enhanced detection (with timeout)
+                            await Promise.race([
+                                analyzeAnswer(answers[i], questions[i], i, plagiarismResult),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('Nebius timeout')), 10000))
+                            ]);
+                            
+                            console.log(`✅ Analysis completed for question ${i + 1}`);
+                        } catch (error) {
+                            console.error(`❌ Analysis failed for question ${i + 1}:`, error);
+                            // Don't let analysis failure prevent submission
+                        }
+                    })();
                     
-                    // Analyze answer with enhanced detection
-                    await analyzeAnswer(answers[i], questions[i], i, plagiarismResult);
+                    analysisPromises.push(analysisPromise);
                 }
             }
+            
+            // Wait for all analysis to complete (with overall timeout)
+            try {
+                await Promise.race([
+                    Promise.all(analysisPromises),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Overall analysis timeout')), 30000))
+                ]);
+                console.log('🎉 All answer analyses completed!');
+            } catch (error) {
+                console.error('⚠️ Some analyses failed or timed out:', error);
+                // Continue with submission even if analysis fails
+            }
 
+            console.log('✅ Setting assessment as submitted...');
             setIsSubmitted(true);
+            console.log('🎉 Assessment submission complete!');
         } catch (error) {
             console.error('Failed to submit assessment:', error);
+            // Still mark as submitted to prevent user from being stuck
+            setIsSubmitted(true);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     // AI analysis of student answers
     const analyzeAnswer = async (answer: string, question: any, questionIndex: number, plagiarismResult?: any) => {
+        console.log(`🔍 Analyzing answer ${questionIndex + 1}/${questions.length}`, {
+            questionTitle: question.title,
+            answerLength: answer.length,
+            wordCount: answer.trim().split(/\s+/).filter(word => word.length > 0).length
+        });
+
+        // First, run our Nebius AI analysis for comprehensive cheating detection
+        try {
+            const timeSpent = (new Date().getTime() - startTime.getTime()) / 1000; // seconds
+            const wordCount = answer.trim().split(/\s+/).filter(word => word.length > 0).length;
+            const characterCount = answer.length;
+
+            console.log(`📡 Sending request to Nebius AI for Q${questionIndex + 1}...`);
+
+            const analysisResponse = await fetch('/api/analyze-answer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    answer,
+                    questionId: question.id?.toString() || questionIndex.toString(),
+                    userId: session?.user?.id?.toString() || '1',
+                    questionText: question.question || question.title,
+                    submissionContext: {
+                        timeSpent,
+                        wordCount,
+                        characterCount,
+                        submissionTime: new Date().toISOString(),
+                        questionIndex: questionIndex + 1,
+                        totalQuestions: questions.length
+                    }
+                })
+            });
+
+            console.log(`📡 Response received for Q${questionIndex + 1}:`, analysisResponse.status);
+
+            if (analysisResponse.ok) {
+                const analysisResult = await analysisResponse.json();
+                console.log(`✅ Nebius AI analysis completed for Q${questionIndex + 1}`, {
+                    cheatingProbability: analysisResult.analysis?.cheating_probability,
+                    confidenceLevel: analysisResult.analysis?.confidence_level,
+                    redFlags: analysisResult.analysis?.red_flags?.length,
+                    flagsCreated: analysisResult.integrity_flags_created
+                });
+                return analysisResult;
+            } else {
+                const errorText = await analysisResponse.text();
+                console.error(`❌ Nebius AI analysis failed for Q${questionIndex + 1}:`, analysisResponse.status, errorText);
+                return null;
+            }
+        } catch (error) {
+            console.error(`❌ Error in Nebius AI analysis for Q${questionIndex + 1}:`, error);
+            return null;
+        }
+
+        // Continue with existing analysis logic...
         // Simulate reference answers (in real app, these would come from database)
         const referenceAnswers = [
             "2NF requires that a relation be in 1NF and that all non-prime attributes are fully functionally dependent on the primary key. 3NF requires that a relation be in 2NF and that no non-prime attribute is transitively dependent on the primary key.",
@@ -1050,9 +1164,17 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                             ) : (
                                 <Button
                                     onClick={handleSubmit}
-                                    className="bg-green-600 hover:bg-green-700"
+                                    disabled={isSubmitting}
+                                    className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
                                 >
-                                    Submit Assessment
+                                    {isSubmitting ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                                            Processing Submission...
+                                        </>
+                                    ) : (
+                                        'Submit Assessment'
+                                    )}
                                 </Button>
                             )}
                         </div>

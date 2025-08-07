@@ -174,6 +174,9 @@ export default function LearnerQuizView({
     // New state to track which scorecard we're viewing
     const [activeScorecard, setActiveScorecard] = useState<ScorecardItem[]>([]);
 
+    // Track when user starts working on each question for timing analysis
+    const [questionStartTimes, setQuestionStartTimes] = useState<Record<string, Date>>({});
+
     // Add state to remember chat scroll position
     const [chatScrollPosition, setChatScrollPosition] = useState(0);
 
@@ -513,6 +516,19 @@ export default function LearnerQuizView({
         }
     }, [currentQuestionIndex, onQuestionChange, validQuestions]);
 
+    // Track question start times for timing analysis
+    useEffect(() => {
+        if (validQuestions.length > 0 && currentQuestionIndex >= 0) {
+            const currentQuestionId = validQuestions[currentQuestionIndex]?.id;
+            if (currentQuestionId && !questionStartTimes[currentQuestionId]) {
+                setQuestionStartTimes(prev => ({
+                    ...prev,
+                    [currentQuestionId]: new Date()
+                }));
+            }
+        }
+    }, [currentQuestionIndex, validQuestions, questionStartTimes]);
+
     // Navigate to next question
     const goToNextQuestion = useCallback(() => {
         // If AI is responding, show confirmation dialog
@@ -650,6 +666,102 @@ export default function LearnerQuizView({
         }
     }, [userId, isTestMode, completedQuestionIds, validQuestions]);
 
+    // Function to analyze answer for cheating detection
+    const analyzeAnswerForCheating = useCallback(async (
+        answer: string,
+        questionId: string,
+        userId: string,
+        question: any,
+        submissionStartTime?: Date
+    ) => {
+        try {
+            console.log('🔍 Starting answer analysis for cheating detection', {
+                questionId,
+                userId,
+                answerLength: answer.length,
+                hasStartTime: !!submissionStartTime
+            });
+
+            // Calculate submission context
+            const now = new Date();
+            const timeSpent = submissionStartTime ? Math.floor((now.getTime() - submissionStartTime.getTime()) / 1000) : 0;
+            const wordCount = answer.trim().split(/\s+/).filter(word => word.length > 0).length;
+            const characterCount = answer.length;
+
+            const submissionContext = {
+                timeSpent,
+                wordCount,
+                characterCount,
+                submissionTime: now.toISOString()
+            };
+
+            // Extract question text from blocks for context
+            const questionText = question?.content ? 
+                question.content.map((block: any) => {
+                    if (block.type === 'text' || block.type === 'paragraph') {
+                        return block.text || block.content || '';
+                    }
+                    return '';
+                }).join(' ').trim() : '';
+
+            console.log('📝 Submitting answer for cheating analysis', {
+                userId,
+                questionId,
+                answerLength: answer.length,
+                wordCount,
+                timeSpent
+            });
+
+            // Call the analysis API
+            const response = await fetch('/api/analyze-answer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    answer,
+                    questionId,
+                    userId,
+                    questionText,
+                    submissionContext
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Answer analysis failed:', {
+                    status: response.status,
+                    error: errorText
+                });
+                return;
+            }
+
+            const result = await response.json();
+            console.log('✅ Answer analysis completed', {
+                userId,
+                questionId,
+                cheatingProbability: result.analysis?.cheating_probability,
+                confidenceLevel: result.analysis?.confidence_level,
+                flagsCreated: result.analysis?.cheating_probability > 0.7
+            });
+
+            // If high cheating probability, we could show a subtle indicator
+            // (The integrity flag will be created automatically by the API)
+            if (result.analysis?.cheating_probability > 0.8) {
+                console.warn('⚠️ High cheating probability detected', {
+                    userId,
+                    questionId,
+                    probability: result.analysis.cheating_probability,
+                    redFlags: result.analysis.red_flags
+                });
+            }
+
+        } catch (error) {
+            console.error('❌ Error analyzing answer for cheating:', error);
+            // Don't throw - we don't want to break the submission flow
+        }
+    }, []);
+
     // Process a user response (shared logic between text and audio submission)
     const processUserResponse = useCallback(
         async (
@@ -690,6 +802,13 @@ export default function LearnerQuizView({
                 ...prev,
                 [currentQuestionId]: [...(prev[currentQuestionId] || []), userMessage]
             }));
+
+            // Analyze the answer for cheating detection (for text and code responses)
+            // We want to analyze answers especially during test mode for integrity monitoring
+            if (responseType === 'text' || responseType === 'code') {
+                const startTime = questionStartTimes[currentQuestionId];
+                analyzeAnswerForCheating(responseContent, currentQuestionId, userId, validQuestions[currentQuestionIndex], startTime);
+            }
 
             // Clear the input field after submission (only for text input)
             if (responseType === 'text' || responseType === 'code') {

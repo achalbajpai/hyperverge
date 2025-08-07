@@ -49,48 +49,55 @@ export async function POST(request: NextRequest) {
         // Step 4: Save to integrity database if cheating detected or suspicious
         if (openaiResult.cheating_detected || openaiResult.confidence > 0.5) {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/flags?user_id=1`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
+                const flagData = {
+                    session_id: session_id,
+                    flag_type: 'proctoring_violation',
+                    severity: openaiResult.cheating_detected ? 'high' : 'medium',
+                    confidence_score: openaiResult.confidence,
+                    evidence_data: {
+                        full_transcription: sarvamResult.transcription_english,
+                        original_transcription: sarvamResult.transcription_original,
+                        detected_language: sarvamResult.detected_language,
+                        sarvam_confidence: sarvamResult.confidence,
+                        cheating_detected: openaiResult.cheating_detected,
+                        cheating_summary: openaiResult.cheating_summary,
+                        suspicious_phrases: openaiResult.suspicious_phrases,
+                        openai_analysis: openaiResult.detailed_analysis,
+                        openai_confidence: openaiResult.confidence,
+                        audio_duration_seconds: sarvamResult.duration || 0,
+                        test_duration_minutes,
+                        overall_confidence: Math.min(sarvamResult.confidence || 0.7, openaiResult.confidence || 0.7),
+                        processing_pipeline: "Sarvam AI → Nebius",
+                        audio_quality: sarvamResult.audio_quality || 'good'
                     },
-                    body: JSON.stringify({
-                        session_id: session_id,
-                        flag_type: 'proctoring_violation',
-                        severity: openaiResult.cheating_detected ? 'high' : 'medium',
-                        confidence_score: openaiResult.confidence,
-                        evidence_data: {
-                            full_transcription: sarvamResult.transcription_english,
-                            original_transcription: sarvamResult.transcription_original,
-                            detected_language: sarvamResult.detected_language,
-                            sarvam_confidence: sarvamResult.confidence,
-                            cheating_detected: openaiResult.cheating_detected,
-                            cheating_summary: openaiResult.cheating_summary,
-                            suspicious_phrases: openaiResult.suspicious_phrases,
-                            openai_analysis: openaiResult.detailed_analysis,
-                            openai_confidence: openaiResult.confidence,
-                            audio_duration_seconds: sarvamResult.duration || 0,
-                            test_duration_minutes,
-                            overall_confidence: Math.min(sarvamResult.confidence || 0.7, openaiResult.confidence || 0.7),
-                            processing_pipeline: "Sarvam AI → Nebius",
-                            audio_quality: sarvamResult.audio_quality || 'good'
-                        },
-                        ai_analysis: `SARVAM + NEBIUS Audio Analysis: ${openaiResult.cheating_detected ? '🚨 CHEATING DETECTED' : '✅ No cheating detected'}. 
+                    ai_analysis: `SARVAM + NEBIUS Audio Analysis: ${openaiResult.cheating_detected ? '🚨 CHEATING DETECTED' : '✅ No cheating detected'}. 
             
 Original Language: ${sarvamResult.detected_language}
 English Translation: "${sarvamResult.transcription_english}"
 Nebius Analysis: ${openaiResult.detailed_analysis}
 Suspicious Phrases: ${openaiResult.suspicious_phrases.join(', ') || 'None'}`,
-                        task_id: assignment_id ? parseInt(assignment_id) : undefined,
-                        question_id: undefined  // No question ID available in this context
-                    })
+                    task_id: assignment_id ? parseInt(assignment_id) : undefined,
+                    question_id: undefined  // No question ID available in this context
+                };
+
+                console.log('🔍 Sending flag data to backend:', JSON.stringify(flagData, null, 2));
+
+                const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/flags?user_id=1`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(flagData)
                 });
                 
                 if (response.ok) {
-                    console.log('✅ Integrity flag saved to database');
+                    const result = await response.json();
+                    console.log('✅ Integrity flag saved to database:', result);
                 } else {
                     const errorText = await response.text();
-                    console.error('❌ Failed to save integrity flag:', response.status, errorText);
+                    console.error('❌ Failed to save integrity flag:');
+                    console.error('Status:', response.status, response.statusText);
+                    console.error('Response:', errorText);
                 }
             } catch (error) {
                 console.error('❌ Failed to save integrity flag:', error);

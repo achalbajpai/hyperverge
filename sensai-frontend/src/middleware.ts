@@ -17,7 +17,7 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute = authRoutes.some(route => pathname.startsWith(route))
   
   // Public paths that don't require authentication
-  const publicPaths = ['/api/auth']
+  const publicPaths = ['/api/auth', '/api/analyze-answer']
   const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
   
   // If the path is public, allow access
