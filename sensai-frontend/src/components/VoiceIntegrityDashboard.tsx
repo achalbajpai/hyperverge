@@ -126,7 +126,7 @@ export default function VoiceIntegrityDashboard({ orgId }: VoiceIntegrityDashboa
         }
 
         try {
-            const wsUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL?.replace('http', 'ws')}/voice/monitor/${orgId}`;
+            const wsUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL?.replace('http', 'ws')}/ws/voice/monitor/${orgId}`;
             const ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
@@ -141,7 +141,7 @@ export default function VoiceIntegrityDashboard({ orgId }: VoiceIntegrityDashboa
             };
 
             ws.onerror = (error) => {
-                console.error('Voice monitoring WebSocket error:', error);
+                console.error('Voice monitoring WebSocket error. Connection failed or was rejected.');
                 setError('Voice monitoring connection error');
             };
 

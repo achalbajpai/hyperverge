@@ -98,14 +98,13 @@ class IntegrityConnectionManager:
             disconnected_websockets = set()
             for websocket in self.active_connections[session_id]:
                 try:
-                    await websocket.send_json({
-                        "type": "integrity_event",
-                        "data": event_data
-                    })
+                    await websocket.send_json(
+                        {"type": "integrity_event", "data": event_data}
+                    )
                 except Exception as exception:
                     print(f"Failed to send integrity event: {exception}")
                     disconnected_websockets.add(websocket)
-            
+
             # Remove disconnected websockets
             for websocket in disconnected_websockets:
                 self.disconnect_session(websocket, session_id)
@@ -116,14 +115,13 @@ class IntegrityConnectionManager:
             disconnected_websockets = set()
             for websocket in self.admin_connections[org_id]:
                 try:
-                    await websocket.send_json({
-                        "type": "integrity_flag",
-                        "data": flag_data
-                    })
+                    await websocket.send_json(
+                        {"type": "integrity_flag", "data": flag_data}
+                    )
                 except Exception as exception:
                     print(f"Failed to send integrity flag: {exception}")
                     disconnected_websockets.add(websocket)
-            
+
             # Remove disconnected websockets
             for websocket in disconnected_websockets:
                 self.disconnect_admin(websocket, org_id)
@@ -134,14 +132,13 @@ class IntegrityConnectionManager:
             disconnected_websockets = set()
             for websocket in self.active_connections[session_id]:
                 try:
-                    await websocket.send_json({
-                        "type": "proctoring_update",
-                        "data": update_data
-                    })
+                    await websocket.send_json(
+                        {"type": "proctoring_update", "data": update_data}
+                    )
                 except Exception as exception:
                     print(f"Failed to send proctoring update: {exception}")
                     disconnected_websockets.add(websocket)
-            
+
             # Remove disconnected websockets
             for websocket in disconnected_websockets:
                 self.disconnect_session(websocket, session_id)
@@ -157,13 +154,15 @@ async def websocket_integrity_session(websocket: WebSocket, session_id: str):
     """WebSocket endpoint for real-time integrity monitoring of a session."""
     try:
         await integrity_manager.connect_session(websocket, session_id)
-        
+
         # Keep the connection alive until client disconnects
         while True:
             # Wait for any message from the client to detect disconnection
             message = await websocket.receive_text()
             # Echo back for heartbeat/ping purposes
-            await websocket.send_json({"type": "pong", "data": {"session_id": session_id}})
+            await websocket.send_json(
+                {"type": "pong", "data": {"session_id": session_id}}
+            )
     except WebSocketDisconnect:
         integrity_manager.disconnect_session(websocket, session_id)
 
@@ -174,7 +173,7 @@ async def websocket_integrity_admin(websocket: WebSocket, org_id: int):
     """WebSocket endpoint for admin to monitor integrity flags across organization."""
     try:
         await integrity_manager.connect_admin(websocket, org_id)
-        
+
         # Keep the connection alive until client disconnects
         while True:
             # Wait for any message from the client to detect disconnection
@@ -191,49 +190,59 @@ async def websocket_proctoring_session(websocket: WebSocket, session_id: str):
     """WebSocket endpoint for real-time proctoring session monitoring."""
     try:
         await integrity_manager.connect_session(websocket, session_id)
-        
+
         # Send initial session status
-        await websocket.send_json({
-            "type": "session_started",
-            "data": {
-                "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat()
+        await websocket.send_json(
+            {
+                "type": "session_started",
+                "data": {
+                    "session_id": session_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
             }
-        })
-        
+        )
+
         # Keep the connection alive and handle real-time events
         while True:
             message = await websocket.receive_json()
             message_type = message.get("type")
-            
+
             # Handle different types of proctoring events
             if message_type == "heartbeat":
-                await websocket.send_json({
-                    "type": "heartbeat_ack",
-                    "data": {"timestamp": datetime.utcnow().isoformat()}
-                })
+                await websocket.send_json(
+                    {
+                        "type": "heartbeat_ack",
+                        "data": {"timestamp": datetime.utcnow().isoformat()},
+                    }
+                )
             elif message_type == "typing_event":
                 # Process typing event for integrity analysis
                 typing_data = message.get("data", {})
-                await websocket.send_json({
-                    "type": "typing_received",
-                    "data": {"event_id": typing_data.get("id")}
-                })
+                await websocket.send_json(
+                    {
+                        "type": "typing_received",
+                        "data": {"event_id": typing_data.get("id")},
+                    }
+                )
             elif message_type == "paste_event":
                 # Process paste event
                 paste_data = message.get("data", {})
-                await websocket.send_json({
-                    "type": "paste_received", 
-                    "data": {"event_id": paste_data.get("id")}
-                })
+                await websocket.send_json(
+                    {
+                        "type": "paste_received",
+                        "data": {"event_id": paste_data.get("id")},
+                    }
+                )
             elif message_type == "focus_event":
                 # Process window focus/blur events
                 focus_data = message.get("data", {})
-                await websocket.send_json({
-                    "type": "focus_received",
-                    "data": {"event_id": focus_data.get("id")}
-                })
-                
+                await websocket.send_json(
+                    {
+                        "type": "focus_received",
+                        "data": {"event_id": focus_data.get("id")},
+                    }
+                )
+
     except WebSocketDisconnect:
         integrity_manager.disconnect_session(websocket, session_id)
     except Exception as e:
@@ -254,6 +263,7 @@ def get_integrity_manager() -> IntegrityConnectionManager:
 # Voice Processing Integration
 try:
     from api.voice_integrity.websocket_handler import VoiceWebSocketManager
+
     # Create voice WebSocket manager instance
     voice_manager = VoiceWebSocketManager(integrity_manager)
     VOICE_PROCESSING_AVAILABLE = True
@@ -263,6 +273,7 @@ except ImportError as e:
     try:
         # Try alternative import path
         from src.api.voice_integrity.websocket_handler import VoiceWebSocketManager
+
         voice_manager = VoiceWebSocketManager(integrity_manager)
         VOICE_PROCESSING_AVAILABLE = True
         print("✓ Voice processing WebSocket manager initialized (alternative path)")
@@ -278,86 +289,94 @@ async def websocket_voice_session(websocket: WebSocket, session_id: str):
     """WebSocket endpoint for real-time voice processing and analysis."""
     try:
         await websocket.accept()
-        
+
         if not VOICE_PROCESSING_AVAILABLE or not voice_manager:
-            await websocket.send_json({
-                "type": "voice_error",
-                "data": {"message": "Voice processing not available"}
-            })
+            await websocket.send_json(
+                {
+                    "type": "voice_error",
+                    "data": {"message": "Voice processing not available"},
+                }
+            )
             await websocket.close(code=1003, reason="Voice processing unavailable")
             return
-        
+
         # Start voice processing session
         if not await voice_manager.start_voice_session(websocket, session_id):
             await websocket.close(code=1003, reason="Failed to start voice session")
             return
-        
+
         # Handle voice processing messages
         while True:
             try:
                 message = await websocket.receive()
-                
+
                 # Handle different message types
                 if "bytes" in message:
                     # Audio data received
                     audio_data = message["bytes"]
-                    result = await voice_manager.process_audio_chunk(session_id, audio_data)
-                    
+                    result = await voice_manager.process_audio_chunk(
+                        session_id, audio_data
+                    )
+
                     if "error" in result:
-                        await websocket.send_json({
-                            "type": "voice_error",
-                            "data": result
-                        })
-                
+                        await websocket.send_json(
+                            {"type": "voice_error", "data": result}
+                        )
+
                 elif "text" in message:
                     # JSON message received
                     try:
                         data = json.loads(message["text"])
                         message_type = data.get("type")
-                        
+
                         if message_type == "heartbeat":
-                            await websocket.send_json({
-                                "type": "heartbeat_ack",
-                                "data": {"timestamp": datetime.utcnow().isoformat()}
-                            })
-                        
+                            await websocket.send_json(
+                                {
+                                    "type": "heartbeat_ack",
+                                    "data": {
+                                        "timestamp": datetime.utcnow().isoformat()
+                                    },
+                                }
+                            )
+
                         elif message_type == "audio_chunk":
                             # Base64 encoded audio in JSON
                             audio_data = data.get("data", {}).get("audio", "")
                             if audio_data:
-                                result = await voice_manager.process_audio_chunk(session_id, audio_data)
-                                await websocket.send_json({
-                                    "type": "audio_processed",
-                                    "data": result
-                                })
-                        
+                                result = await voice_manager.process_audio_chunk(
+                                    session_id, audio_data
+                                )
+                                await websocket.send_json(
+                                    {"type": "audio_processed", "data": result}
+                                )
+
                         elif message_type == "stop_voice_session":
                             # Stop voice processing
                             summary = await voice_manager.stop_voice_session(session_id)
-                            await websocket.send_json({
-                                "type": "voice_session_summary", 
-                                "data": summary
-                            })
+                            await websocket.send_json(
+                                {"type": "voice_session_summary", "data": summary}
+                            )
                             break
-                        
+
                         elif message_type == "get_session_status":
                             # Get current session status
                             status = voice_manager.get_active_sessions()
-                            await websocket.send_json({
-                                "type": "session_status",
-                                "data": status
-                            })
-                    
+                            await websocket.send_json(
+                                {"type": "session_status", "data": status}
+                            )
+
                     except json.JSONDecodeError:
-                        await websocket.send_json({
-                            "type": "error",
-                            "data": {"message": "Invalid JSON message"}
-                        })
-                        
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "data": {"message": "Invalid JSON message"},
+                            }
+                        )
+
             except Exception as e:
                 print(f"Error processing voice message: {e}")
                 break
-                
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -373,55 +392,61 @@ async def websocket_voice_session(websocket: WebSocket, session_id: str):
 async def websocket_voice_monitor(websocket: WebSocket, org_id: int):
     """WebSocket endpoint for admin voice monitoring dashboard."""
     try:
-        await websocket.accept()
-        
         if not VOICE_PROCESSING_AVAILABLE or not voice_manager:
-            await websocket.send_json({
-                "type": "voice_error", 
-                "data": {"message": "Voice processing not available"}
-            })
+            await integrity_manager.connect_admin(websocket, org_id)
+            await websocket.send_json(
+                {
+                    "type": "voice_error",
+                    "data": {"message": "Voice processing not available"},
+                }
+            )
             await websocket.close(code=1003, reason="Voice processing unavailable")
             return
-        
+
         await integrity_manager.connect_admin(websocket, org_id)
-        
+
         # Send initial status
-        await websocket.send_json({
-            "type": "voice_monitor_connected",
-            "data": {
-                "org_id": org_id,
-                "active_sessions": voice_manager.get_active_sessions(),
-                "timestamp": datetime.utcnow().isoformat()
+        await websocket.send_json(
+            {
+                "type": "voice_monitor_connected",
+                "data": {
+                    "org_id": org_id,
+                    "active_sessions": voice_manager.get_active_sessions(),
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
             }
-        })
-        
+        )
+
         # Keep connection alive and send periodic updates
         while True:
             message = await websocket.receive_text()
-            
+
             # Handle monitor requests
             try:
                 data = json.loads(message)
                 message_type = data.get("type")
-                
+
                 if message_type == "get_active_sessions":
-                    await websocket.send_json({
-                        "type": "active_sessions",
-                        "data": voice_manager.get_active_sessions()
-                    })
-                
+                    await websocket.send_json(
+                        {
+                            "type": "active_sessions",
+                            "data": voice_manager.get_active_sessions(),
+                        }
+                    )
+
                 elif message_type == "heartbeat":
-                    await websocket.send_json({
-                        "type": "heartbeat_ack",
-                        "data": {"timestamp": datetime.utcnow().isoformat()}
-                    })
-                    
+                    await websocket.send_json(
+                        {
+                            "type": "heartbeat_ack",
+                            "data": {"timestamp": datetime.utcnow().isoformat()},
+                        }
+                    )
+
             except json.JSONDecodeError:
-                await websocket.send_json({
-                    "type": "error", 
-                    "data": {"message": "Invalid JSON"}
-                })
-                
+                await websocket.send_json(
+                    {"type": "error", "data": {"message": "Invalid JSON"}}
+                )
+
     except WebSocketDisconnect:
         integrity_manager.disconnect_admin(websocket, org_id)
     except Exception as e:

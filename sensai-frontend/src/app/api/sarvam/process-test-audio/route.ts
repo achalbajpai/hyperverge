@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import 'dotenv/config';
+import FormData from 'form-data';
 
 export async function POST(request: NextRequest) {
     try {
@@ -29,7 +31,7 @@ export async function POST(request: NextRequest) {
             detected_language: sarvamResult.detected_language,
             sarvam_confidence: sarvamResult.confidence,
             
-            // OpenAI Results
+            // Nebius Results (formerly OpenAI)
             cheating_detected: openaiResult.cheating_detected,
             cheating_summary: openaiResult.cheating_summary,
             suspicious_phrases: openaiResult.suspicious_phrases,
@@ -44,13 +46,44 @@ export async function POST(request: NextRequest) {
             audio_quality: sarvamResult.audio_quality || 'good'
         };
 
+        // Step 4: Save to integrity database if cheating detected or suspicious
+        if (openaiResult.cheating_detected || openaiResult.confidence > 0.5) {
+            try {
+                await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/flags`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: 1, // TODO: Get from session
+                        session_id: session_id,
+                        assignment_id: assignment_id,
+                        flag_type: 'voice_integrity',
+                        severity: openaiResult.cheating_detected ? 'high' : 'medium',
+                        confidence_score: openaiResult.confidence,
+                        evidence_data: {
+                            transcription: sarvamResult.transcription_english,
+                            suspicious_phrases: openaiResult.suspicious_phrases,
+                            audio_duration: sarvamResult.duration,
+                            detected_language: sarvamResult.detected_language
+                        },
+                        ai_analysis: openaiResult.detailed_analysis
+                    })
+                });
+                console.log('✅ Integrity flag saved to database');
+            } catch (error) {
+                console.error('❌ Failed to save integrity flag:', error);
+            }
+        }
+
         console.log('✅ Audio processing pipeline completed successfully');
         return NextResponse.json(finalResult);
 
     } catch (error) {
         console.error('❌ Error in audio processing pipeline:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         return NextResponse.json(
-            { error: 'Failed to process audio', details: error.message },
+            { error: 'Failed to process audio', details: errorMessage },
             { status: 500 }
         );
     }
@@ -68,25 +101,32 @@ async function transcribeWithSarvam(audioBase64: string, audioFormat: string) {
     try {
         console.log('🔄 Sending audio to Sarvam AI for transcription...');
         
-        // Convert base64 to blob for Sarvam API
+        // Convert base64 to buffer for Sarvam API
         const audioBuffer = Buffer.from(audioBase64, 'base64');
         
-        // Create FormData for Sarvam API
-        const formData = new FormData();
-        const audioBlob = new Blob([audioBuffer], { type: audioFormat || 'audio/webm' });
-        formData.append('file', audioBlob, 'test_audio.webm');
-        formData.append('model', 'saarika:v1'); // Using Saarika model as specified
+        // Create FormData using Node.js form-data library
+        const form = new FormData();
+        form.append('file', audioBuffer, {
+            filename: 'audio.webm',
+            contentType: 'audio/webm'
+        });
+        form.append('model', 'saarika:v2.5');
+        form.append('language_code', 'unknown');
         
         // Sarvam API call for transcription
         const response = await fetch('https://api.sarvam.ai/speech-to-text', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${sarvamApiKey}`,
+                'api-subscription-key': sarvamApiKey,
+                ...form.getHeaders(),
             },
-            body: formData,
+            body: form.getBuffer(),
         });
 
         if (!response.ok) {
+            // Get the actual error response for debugging
+            const errorText = await response.text();
+            console.error('Sarvam API error details:', errorText);
             throw new Error(`Sarvam API error: ${response.status} ${response.statusText}`);
         }
 
@@ -109,12 +149,15 @@ async function transcribeWithSarvam(audioBase64: string, audioFormat: string) {
     }
 }
 
-// Step 2: Analyze English transcription with OpenAI
+// Step 2: Analyze English transcription with Nebius AI
 async function analyzeWithOpenAI(englishTranscription: string, metadata: any) {
-    const openaiKey = process.env.OPENAI_API_KEY;
+    const nebiusKey = process.env.NEBIUS_API_KEY;
     
-    if (!openaiKey) {
-        console.warn('⚠️ OpenAI API key not found, using fallback');
+    console.log('🔑 Nebius key length:', nebiusKey ? nebiusKey.length : 'undefined');
+    console.log('🔑 Nebius key starts with:', nebiusKey ? nebiusKey.substring(0, 10) + '...' : 'undefined');
+    
+    if (!nebiusKey) {
+        console.warn('⚠️ Nebius API key not found, using fallback');
         return generateOpenAIFallback(englishTranscription);
     }
 
@@ -129,7 +172,7 @@ async function analyzeWithOpenAI(englishTranscription: string, metadata: any) {
     }
 
     try {
-        console.log('🔄 Sending transcription to OpenAI for cheating analysis...');
+        console.log('🔄 Sending transcription to Nebius AI for cheating analysis...');
 
         const analysisPrompt = `
 You are an AI academic integrity expert analyzing audio from a student test session.
@@ -166,14 +209,16 @@ Respond with ONLY a JSON object:
   "confidence": number (0-1)
 }`;
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        const response = await fetch('https://api.studio.nebius.com/v1/chat/completions', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${openaiKey}`,
+                'Authorization': `Bearer ${nebiusKey}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'gpt-4',
+                model: 'Qwen/Qwen3-235B-A22B',
+                temperature: 0.6,
+                top_p: 0.95,
                 messages: [
                     {
                         role: 'system',
@@ -184,23 +229,54 @@ Respond with ONLY a JSON object:
                         content: analysisPrompt
                     }
                 ],
-                temperature: 0.1,
                 max_tokens: 800
             }),
         });
 
         if (!response.ok) {
-            throw new Error(`OpenAI API error: ${response.status}`);
+            throw new Error(`Nebius API error: ${response.status}`);
         }
 
         const result = await response.json();
-        const analysis = JSON.parse(result.choices[0].message.content);
+        let analysisContent = result.choices[0].message.content;
         
-        console.log('✅ OpenAI analysis completed');
+        console.log('🔍 Raw Nebius response:', analysisContent.substring(0, 200) + '...');
+        
+        // Handle Nebius AI thinking tags - extract JSON from response
+        if (analysisContent.includes('<think>') || analysisContent.includes('</think>')) {
+            // Try multiple patterns to find JSON
+            let jsonMatch = analysisContent.match(/\{[^}]*"cheating_detected"[^}]*\}/);
+            if (!jsonMatch) {
+                jsonMatch = analysisContent.match(/\{[\s\S]*?"cheating_detected"[\s\S]*?\}/);
+            }
+            if (!jsonMatch) {
+                // Look for JSON after </think> tag
+                const afterThink = analysisContent.split('</think>')[1];
+                if (afterThink) {
+                    jsonMatch = afterThink.match(/\{[\s\S]*\}/);
+                }
+            }
+            if (!jsonMatch) {
+                // Look for any JSON-like structure with our expected fields
+                jsonMatch = analysisContent.match(/\{[\s\S]*?"confidence"[\s\S]*?\}/);
+            }
+            
+            if (jsonMatch) {
+                analysisContent = jsonMatch[0];
+                console.log('🔍 Extracted JSON:', analysisContent);
+            } else {
+                console.warn('⚠️ No JSON found in Nebius response, using fallback');
+                return generateOpenAIFallback(englishTranscription);
+            }
+        }
+        
+        const analysis = JSON.parse(analysisContent);
+        
+        console.log('✅ Nebius AI analysis completed');
         return analysis;
 
     } catch (error) {
-        console.error('❌ OpenAI analysis failed:', error);
+        console.error('❌ Nebius analysis failed:', error);
         return generateOpenAIFallback(englishTranscription);
     }
 }
