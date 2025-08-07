@@ -30,6 +30,7 @@ from api.models import (
     IntegrityDashboardStats,
     IntegritySeverity,
     IntegrityFlagStatus,
+    IntegrityFlagType,
 )
 
 router = APIRouter()
@@ -39,14 +40,29 @@ router = APIRouter()
 
 @router.post("/events", response_model=IntegrityEvent)
 async def create_event(
-    user_id: int,
-    event_request: CreateIntegrityEventRequest
+    event_request: CreateIntegrityEventRequest,
+    user_id: Optional[int] = Query(None)
 ):
     """Create a new integrity event."""
     try:
+        # Get user_id from query params if not in body
+        if user_id is None:
+            raise HTTPException(status_code=400, detail="user_id query parameter is required")
+        
         return await create_integrity_event(user_id, event_request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create integrity event: {str(e)}")
+
+
+# Add a GET endpoint for /events with user_id query param for compatibility
+@router.get("/events", response_model=List[IntegrityEvent])
+async def get_events_by_user_id(
+    user_id: int = Query(..., description="User ID to get events for"),
+    session_id: Optional[str] = Query(None),
+    limit: int = Query(100, le=500)
+):
+    """Get integrity events for a user using query parameter."""
+    return await get_user_integrity_events(user_id, session_id, limit)
 
 
 @router.get("/events/{event_id}", response_model=IntegrityEvent)
@@ -130,11 +146,12 @@ async def get_flag(flag_id: int):
 async def get_flags(
     status: Optional[IntegrityFlagStatus] = Query(None),
     severity: Optional[IntegritySeverity] = Query(None),
+    flag_type: Optional[IntegrityFlagType] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0)
 ):
     """Get integrity flags with filtering options."""
-    return await get_integrity_flags_with_details(status, severity, limit, offset)
+    return await get_integrity_flags_with_details(status, severity, flag_type, limit, offset)
 
 
 # Integrity Reviews Endpoints

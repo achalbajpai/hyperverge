@@ -775,6 +775,18 @@ Do not include the type of task in the name of the task."""
     )
 
 
+@router.post("/check-plagiarism")
+async def check_plagiarism(request: Dict):
+    """Check text for plagiarism."""
+    # For now, return a mock response. In production, you'd implement actual plagiarism detection
+    return {
+        "is_plagiarized": False,
+        "confidence": 0.1,
+        "sources": [],
+        "message": "Content appears to be original"
+    }
+
+
 @router.post("/generate/course/{course_id}/structure")
 async def generate_course_structure(
     course_id: int,

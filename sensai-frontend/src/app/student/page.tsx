@@ -18,6 +18,23 @@ export default function StudentDashboard() {
     const [loading, setLoading] = useState(true);
     const [selectedView, setSelectedView] = useState<'overview' | 'assignments'>('overview');
 
+    // Clear any stale navigation data on dashboard load
+    useEffect(() => {
+        // Clear previous assignment data when returning to dashboard
+        const storedData = localStorage.getItem('currentAssignment');
+        if (storedData) {
+            try {
+                const assignmentData = JSON.parse(storedData);
+                // Clear data older than 30 minutes to prevent stale navigation
+                if (Date.now() - assignmentData.timestamp > 30 * 60 * 1000) {
+                    localStorage.removeItem('currentAssignment');
+                }
+            } catch (error) {
+                localStorage.removeItem('currentAssignment');
+            }
+        }
+    }, []);
+
     // Fetch real data from backend
     useEffect(() => {
         const fetchData = async () => {
@@ -73,15 +90,34 @@ export default function StudentDashboard() {
     }, [status, session?.user?.id]);
 
     const handleStartAssignment = (assignment: Assignment) => {
+        // Store assignment data in localStorage to prevent navigation issues
+        const assignmentData = {
+            id: assignment.id,
+            courseId: assignment.course_id,
+            title: assignment.title,
+            type: assignment.type,
+            integrityEnabled: assignment.integrityEnabled,
+            timestamp: Date.now()
+        };
+        localStorage.setItem('currentAssignment', JSON.stringify(assignmentData));
+        
         if (assignment.type === 'quiz') {
-            // Navigate to assessment page with assignment data
-            router.push(`/student/assessment?assignmentId=${assignment.id}&courseId=${assignment.course_id}&title=${encodeURIComponent(assignment.title)}`);
+            // For integrity-enabled quizzes, go through rules and camera setup first
+            if (assignment.integrityEnabled) {
+                router.push(`/student/rules?assignmentId=${assignment.id}&returnTo=assessment`);
+            } else {
+                router.push(`/student/assessment?assignmentId=${assignment.id}&courseId=${assignment.course_id}&title=${encodeURIComponent(assignment.title)}`);
+            }
         } else if (assignment.type === 'learning_material') {
             // Navigate to learning material viewer
             router.push(`/student/learning?assignmentId=${assignment.id}&courseId=${assignment.course_id}&title=${encodeURIComponent(assignment.title)}`);
         } else if (assignment.type === 'project') {
-            // Navigate to project workspace
-            router.push(`/student/project?assignmentId=${assignment.id}&courseId=${assignment.course_id}&title=${encodeURIComponent(assignment.title)}`);
+            // For integrity-enabled projects, go through rules and camera setup first
+            if (assignment.integrityEnabled) {
+                router.push(`/student/rules?assignmentId=${assignment.id}&returnTo=project`);
+            } else {
+                router.push(`/student/project?assignmentId=${assignment.id}&courseId=${assignment.course_id}&title=${encodeURIComponent(assignment.title)}`);
+            }
         }
     };
 

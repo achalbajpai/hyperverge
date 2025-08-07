@@ -331,6 +331,15 @@ function AssessmentContent() {
 
 
 
+    const analyzeSpeechContent = (transcription: any) => {
+        const suspiciousKeywords = [
+            'answer', 'help', 'tell me', 'what is', 'give me', 'solution',
+            'जवाब', 'उत्तर', 'সাহায্য', 'উত্তর', 'సమాధానం', 'జవాబు'
+        ];
+
+        const text = transcription.text.toLowerCase();
+        const foundKeywords = suspiciousKeywords.filter(keyword => text.includes(keyword));
+
     const stopAudioRecording = () => {
         console.log('🛑 Stopping audio recording...');
         setIsRecordingAudio(false);

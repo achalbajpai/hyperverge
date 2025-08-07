@@ -74,6 +74,9 @@ export enum IntegrityEventType {
     TAB_SWITCH = "tab_switch",
     COPY_PASTE = "copy_paste",
     RAPID_COMPLETION = "rapid_completion",
+    VOICE_ACTIVITY = "voice_activity",
+    VOICE_TRANSCRIPTION = "voice_transcription",
+    SUSPICIOUS_SPEECH = "suspicious_speech",
 }
 
 export enum IntegrityFlagType {
@@ -81,6 +84,7 @@ export enum IntegrityFlagType {
     BEHAVIORAL_ANOMALY = "behavioral_anomaly",
     PROCTORING_VIOLATION = "proctoring_violation",
     TECHNICAL_IRREGULARITY = "technical_irregularity",
+    TEST_COMPLETION = "test_completion",
 }
 
 export enum IntegritySeverity {

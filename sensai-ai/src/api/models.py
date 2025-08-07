@@ -717,6 +717,9 @@ class IntegrityEventType(str, Enum):
     TAB_SWITCH = "tab_switch"
     COPY_PASTE = "copy_paste"
     RAPID_COMPLETION = "rapid_completion"
+    VOICE_ACTIVITY = "voice_activity"
+    VOICE_TRANSCRIPTION = "voice_transcription"
+    SUSPICIOUS_SPEECH = "suspicious_speech"
 
     def __str__(self):
         return self.value

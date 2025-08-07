@@ -60,6 +60,7 @@ integrity_events_table_name = "integrity_events"
 proctoring_sessions_table_name = "proctoring_sessions"
 integrity_flags_table_name = "integrity_flags"
 integrity_reviews_table_name = "integrity_reviews"
+follow_up_actions_table_name = "follow_up_actions"
 
 UPLOAD_FOLDER_NAME = "uploads"
 

@@ -170,26 +170,24 @@ function ProjectContent() {
                 />
             )}
 
-            <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+                <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Project Instructions */}
                     <div className="lg:col-span-1">
-                        <Card>
+                        <Card className="bg-[#1A1A1A] border-gray-700">
                             <CardHeader>
-                                <CardTitle>Project Instructions</CardTitle>
+                                <CardTitle className="text-white">Project Instructions</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4">
                                     <div>
-                                        <h3 className="font-semibold mb-2">Description</h3>
-                                        <p className="text-gray-600 text-sm">
+                                        <h3 className="font-semibold mb-2 text-white">Description</h3>
+                                        <p className="text-gray-400 text-sm">
                                             {assignment.description}
                                         </p>
-                                    </div>
-                                    
-                                    <div>
-                                        <h3 className="font-semibold mb-2">Requirements</h3>
-                                        <ul className="text-sm text-gray-600 space-y-1">
+                                    </div>                                    <div>
+                                        <h3 className="font-semibold mb-2 text-white">Requirements</h3>
+                                        <ul className="text-sm text-gray-400 space-y-1">
                                             <li>• Build a functional web application</li>
                                             <li>• Implement user authentication</li>
                                             <li>• Use modern web technologies</li>
@@ -199,8 +197,8 @@ function ProjectContent() {
                                     </div>
                                     
                                     <div>
-                                        <h3 className="font-semibold mb-2">Submission</h3>
-                                        <p className="text-gray-600 text-sm">
+                                        <h3 className="font-semibold mb-2 text-white">Submission</h3>
+                                        <p className="text-gray-400 text-sm">
                                             Save your work frequently and submit when complete. 
                                             Make sure your code is well-documented and functional.
                                         </p>
@@ -208,8 +206,8 @@ function ProjectContent() {
 
                                     {assignment.dueDate && (
                                         <div>
-                                            <h3 className="font-semibold mb-2">Due Date</h3>
-                                            <p className="text-gray-600 text-sm">
+                                            <h3 className="font-semibold mb-2 text-white">Due Date</h3>
+                                            <p className="text-gray-400 text-sm">
                                                 {new Date(assignment.dueDate).toLocaleDateString()} at 11:59 PM
                                             </p>
                                         </div>
@@ -221,10 +219,10 @@ function ProjectContent() {
 
                     {/* Code Editor */}
                     <div className="lg:col-span-2">
-                        <Card>
+                        <Card className="bg-[#1A1A1A] border-gray-700">
                             <CardHeader>
                                 <div className="flex justify-between items-center">
-                                    <CardTitle className="flex items-center">
+                                    <CardTitle className="flex items-center text-white">
                                         <Code className="w-5 h-5 mr-2" />
                                         Code Editor
                                     </CardTitle>
@@ -234,6 +232,7 @@ function ProjectContent() {
                                             size="sm"
                                             onClick={handleSaveProject}
                                             disabled={isSubmitted}
+                                            className="border-gray-600 text-gray-300 hover:bg-gray-700"
                                         >
                                             <Save className="w-4 h-4 mr-2" />
                                             Save
@@ -242,6 +241,7 @@ function ProjectContent() {
                                             variant="outline"
                                             size="sm"
                                             disabled={isSubmitted}
+                                            className="border-gray-600 text-gray-300 hover:bg-gray-700"
                                         >
                                             <Play className="w-4 h-4 mr-2" />
                                             Run
@@ -250,30 +250,30 @@ function ProjectContent() {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="border rounded-lg">
+                                <div className="border border-gray-600 rounded-lg">
                                     <textarea
                                         value={code}
                                         onChange={(e) => setCode(e.target.value)}
-                                        className="w-full h-96 p-4 font-mono text-sm border-none resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg"
+                                        className="w-full h-96 p-4 font-mono text-sm border-none resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg bg-[#0D1117] text-white placeholder-gray-400"
                                         placeholder="Write your code here..."
                                         disabled={isSubmitted}
                                     />
                                 </div>
                                 
                                 {/* File Upload/Download */}
-                                <div className="flex justify-between items-center mt-4 pt-4 border-t">
+                                <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-600">
                                     <div className="flex space-x-2">
-                                        <Button variant="outline" size="sm" disabled={isSubmitted}>
+                                        <Button variant="outline" size="sm" disabled={isSubmitted} className="border-gray-600 text-gray-300 hover:bg-gray-700">
                                             <Upload className="w-4 h-4 mr-2" />
                                             Upload File
                                         </Button>
-                                        <Button variant="outline" size="sm">
+                                        <Button variant="outline" size="sm" className="border-gray-600 text-gray-300 hover:bg-gray-700">
                                             <Download className="w-4 h-4 mr-2" />
                                             Download
                                         </Button>
                                     </div>
                                     
-                                    <div className="text-sm text-gray-500">
+                                    <div className="text-sm text-gray-400">
                                         Auto-saved • {new Date().toLocaleTimeString()}
                                     </div>
                                 </div>
@@ -281,14 +281,14 @@ function ProjectContent() {
                         </Card>
 
                         {/* Submission */}
-                        <Card className="mt-6">
+                        <Card className="mt-6 bg-[#1A1A1A] border-gray-700">
                             <CardContent className="py-6">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <h3 className="text-lg font-semibold mb-1">
+                                        <h3 className="text-lg font-semibold mb-1 text-white">
                                             {isSubmitted ? 'Project Submitted!' : 'Ready to Submit?'}
                                         </h3>
-                                        <p className="text-gray-600 text-sm">
+                                        <p className="text-gray-400 text-sm">
                                             {isSubmitted 
                                                 ? 'Your project has been submitted successfully. You can view it on your dashboard.'
                                                 : 'Make sure your code is complete and tested before submitting.'
@@ -304,6 +304,7 @@ function ProjectContent() {
                                         <Button
                                             variant="outline"
                                             onClick={() => router.push('/student')}
+                                            className="border-gray-600 text-gray-300 hover:bg-gray-700"
                                         >
                                             {isSubmitted ? 'Back to Dashboard' : 'Save & Exit'}
                                         </Button>

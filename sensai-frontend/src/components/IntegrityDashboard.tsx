@@ -27,6 +27,9 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
     const [error, setError] = useState<string | null>(null);
     const [selectedFlag, setSelectedFlag] = useState<IntegrityFlagWithDetails | null>(null);
     const [showReviewModal, setShowReviewModal] = useState(false);
+    const [showTimelineModal, setShowTimelineModal] = useState(false);
+    const [timelineData, setTimelineData] = useState<any[]>([]);
+    const [loadingTimeline, setLoadingTimeline] = useState(false);
     const [filters, setFilters] = useState({
         status: '' as IntegrityFlagStatus | '',
         severity: '' as IntegritySeverity | '',
@@ -74,6 +77,62 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
             setLoading(false);
         }
     }, [filters]);
+
+    // Fetch user timeline
+    const fetchUserTimeline = useCallback(async (userId: number, taskId?: number) => {
+        try {
+            setLoadingTimeline(true);
+            const params = new URLSearchParams();
+            if (taskId) params.append('task_id', taskId.toString());
+            params.append('limit', '50');
+
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/users/${userId}/timeline?${params.toString()}`);
+            if (response.ok) {
+                const data = await response.json();
+                setTimelineData(data);
+                setShowTimelineModal(true);
+            } else {
+                setError('Failed to fetch user timeline');
+            }
+        } catch (err) {
+            setError('Network error occurred while fetching timeline');
+        } finally {
+            setLoadingTimeline(false);
+        }
+    }, []);
+
+    // Handle follow-up actions
+    const handleFollowUpAction = async (action: 'suggest_resources' | 'schedule_viva', flagId: number, userId: number) => {
+        try {
+            const followUpData = {
+                action_type: action,
+                flag_id: flagId,
+                user_id: userId,
+                timestamp: new Date().toISOString(),
+                status: 'pending'
+            };
+
+            // In a real implementation, you'd send this to your backend
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/follow-up-actions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(followUpData)
+            });
+
+            if (response.ok) {
+                const actionText = action === 'suggest_resources' 
+                    ? 'Learning resources have been suggested to the student'
+                    : '2-minute viva has been scheduled for the student';
+                
+                alert(actionText); // In production, use a proper notification system
+                fetchFlags(); // Refresh the flags list
+            } else {
+                setError('Failed to execute follow-up action');
+            }
+        } catch (err) {
+            setError('Network error occurred while executing follow-up action');
+        }
+    };
 
     // Submit review
     const submitReview = async () => {
@@ -261,6 +320,7 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                         <option value={IntegrityFlagType.BEHAVIORAL_ANOMALY}>Behavioral Anomaly</option>
                         <option value={IntegrityFlagType.PROCTORING_VIOLATION}>Proctoring Violation</option>
                         <option value={IntegrityFlagType.TECHNICAL_IRREGULARITY}>Technical Irregularity</option>
+                        <option value={IntegrityFlagType.TEST_COMPLETION}>Test Completion</option>
                     </select>
 
                     {(filters.status || filters.severity || filters.flagType) && (
@@ -300,6 +360,9 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                         Status
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                        Audio
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                         Created
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -308,8 +371,8 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                 </tr>
                             </thead>
                             <tbody className="bg-gray-900 divide-y divide-gray-700">
-                                {flags.map((flag) => (
-                                    <tr key={flag.id} className="hover:bg-gray-800">
+                                {flags.map((flag, index) => (
+                                    <tr key={`flag-${flag.id}-${index}`} className="hover:bg-gray-800">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div>
                                                 <div className="text-sm font-light text-white">
@@ -336,22 +399,44 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                                 {flag.status}
                                             </span>
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                                            {flag.evidence_data && flag.evidence_data.full_transcription ? (
+                                                <div className="flex items-center justify-center space-x-1">
+                                                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                                                    <span className="text-xs text-blue-400">Yes</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-gray-500">-</span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                                             {formatDate(flag.created_at)}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <Button
-                                                onClick={() => {
-                                                    setSelectedFlag(flag);
-                                                    setShowReviewModal(true);
-                                                }}
-                                                variant="outline"
-                                                size="sm"
-                                                className="flex items-center gap-1"
-                                            >
-                                                <Eye className="h-4 w-4" />
-                                                Review
-                                            </Button>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    onClick={() => {
+                                                        setSelectedFlag(flag);
+                                                        setShowReviewModal(true);
+                                                    }}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="flex items-center gap-1"
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                    Review
+                                                </Button>
+                                                <Button
+                                                    onClick={() => fetchUserTimeline(flag.user_id, flag.task_id)}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="flex items-center gap-1"
+                                                    disabled={loadingTimeline}
+                                                >
+                                                    <Clock className="h-4 w-4" />
+                                                    Timeline
+                                                </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -403,6 +488,48 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                         <p className="text-sm text-gray-900 bg-gray-100 p-3 rounded">{selectedFlag.ai_analysis}</p>
                                     </div>
                                 )}
+
+                                {/* Audio Transcription Section */}
+                                {selectedFlag.evidence_data && selectedFlag.evidence_data.full_transcription && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Audio Transcription</label>
+                                        <div className="bg-blue-50 border border-blue-200 p-3 rounded">
+                                            <p className="text-sm text-gray-900 mb-2 italic">
+                                                "{selectedFlag.evidence_data.full_transcription}"
+                                            </p>
+                                            <div className="text-xs text-gray-600 space-y-1">
+                                                {selectedFlag.evidence_data.speech_duration_seconds && (
+                                                    <p><strong>Duration:</strong> {selectedFlag.evidence_data.speech_duration_seconds}s</p>
+                                                )}
+                                                {selectedFlag.evidence_data.cheating_detected !== undefined && (
+                                                    <p><strong>Cheating Detected:</strong> 
+                                                        <span className={selectedFlag.evidence_data.cheating_detected ? 'text-red-600 font-semibold' : 'text-green-600'}>
+                                                            {selectedFlag.evidence_data.cheating_detected ? ' YES' : ' NO'}
+                                                        </span>
+                                                    </p>
+                                                )}
+                                                {selectedFlag.evidence_data.suspicious_phrases && selectedFlag.evidence_data.suspicious_phrases.length > 0 && (
+                                                    <p><strong>Suspicious Phrases:</strong> {selectedFlag.evidence_data.suspicious_phrases.join(', ')}</p>
+                                                )}
+                                                {selectedFlag.evidence_data.confidence_scores && (
+                                                    <p><strong>Confidence:</strong> {Math.round(selectedFlag.evidence_data.confidence_scores.analysis * 100)}%</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Enhanced Evidence Data Display */}
+                                {selectedFlag.evidence_data && !selectedFlag.evidence_data.full_transcription && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Evidence Details</label>
+                                        <div className="bg-gray-50 border p-3 rounded">
+                                            <pre className="text-xs text-gray-700 whitespace-pre-wrap">
+                                                {JSON.stringify(selectedFlag.evidence_data, null, 2)}
+                                            </pre>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Review Form */}
@@ -444,6 +571,31 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                 </div>
                             </div>
 
+                            {/* Follow-up Actions */}
+                            <div className="border-t pt-4">
+                                <h4 className="text-sm font-medium text-gray-700 mb-3">Follow-up Actions</h4>
+                                <div className="flex gap-2">
+                                    <Button
+                                        onClick={() => handleFollowUpAction('suggest_resources', selectedFlag.id, selectedFlag.user_id)}
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex items-center gap-1"
+                                    >
+                                        <CheckCircle className="h-4 w-4" />
+                                        Suggest Resources
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleFollowUpAction('schedule_viva', selectedFlag.id, selectedFlag.user_id)}
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex items-center gap-1"
+                                    >
+                                        <Clock className="h-4 w-4" />
+                                        Schedule 2-min Viva
+                                    </Button>
+                                </div>
+                            </div>
+
                             {/* Modal Actions */}
                             <div className="flex justify-end gap-3 mt-6">
                                 <Button
@@ -455,6 +607,132 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                                 <Button onClick={submitReview}>
                                     Submit Review
                                 </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Timeline Modal */}
+            {showTimelineModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold">User Session Timeline</h2>
+                            <button
+                                onClick={() => { setShowTimelineModal(false); setTimelineData([]); }}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {loadingTimeline ? (
+                            <div className="flex items-center justify-center p-8">
+                                <div className="text-lg">Loading timeline...</div>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {timelineData.length === 0 ? (
+                                    <p className="text-gray-500 text-center py-8">No timeline events found</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {timelineData.map((event, index) => (
+                                            <div key={index} className="border-l-4 border-blue-500 pl-4 py-2">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <h4 className="font-medium text-gray-900">
+                                                            {event.event_type === 'integrity_event' ? '📊' : '🚩'} {event.description}
+                                                        </h4>
+                                                        <p className="text-sm text-gray-600 mt-1">
+                                                            {formatDate(event.timestamp)}
+                                                        </p>
+                                                        
+                                                        {/* Event Details */}
+                                                        {event.data && (
+                                                            <div className="mt-2 p-3 bg-gray-50 rounded text-sm">
+                                                                {event.data.event_type && (
+                                                                    <p><strong>Type:</strong> {event.data.event_type}</p>
+                                                                )}
+                                                                {event.data.confidence_score && (
+                                                                    <p><strong>Confidence:</strong> {Math.round(event.data.confidence_score * 100)}%</p>
+                                                                )}
+                                                                {event.data.ai_analysis && (
+                                                                    <p><strong>Analysis:</strong> {event.data.ai_analysis}</p>
+                                                                )}
+                                                                {event.data.transcription && (
+                                                                    <p><strong>Transcription:</strong> "{event.data.transcription}"</p>
+                                                                )}
+                                                                {event.data.language && (
+                                                                    <p><strong>Language:</strong> {event.data.language}</p>
+                                                                )}
+                                                                {event.data.paste_length && (
+                                                                    <p><strong>Paste Length:</strong> {event.data.paste_length} characters</p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {/* Severity Indicator */}
+                                                    {event.severity && (
+                                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ml-4 ${
+                                                            event.severity === 'high' ? 'bg-red-100 text-red-800' :
+                                                            event.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                                            'bg-blue-100 text-blue-800'
+                                                        }`}>
+                                                            {event.severity}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Timeline Summary */}
+                                {timelineData.length > 0 && (
+                                    <div className="mt-6 p-4 bg-gray-100 rounded-lg">
+                                        <h4 className="font-medium text-gray-900 mb-2">Session Summary</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                            <div>
+                                                <p className="text-gray-600">Total Events</p>
+                                                <p className="font-semibold">{timelineData.length}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600">High Priority</p>
+                                                <p className="font-semibold text-red-600">
+                                                    {timelineData.filter(e => e.severity === 'high').length}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600">Medium Priority</p>
+                                                <p className="font-semibold text-yellow-600">
+                                                    {timelineData.filter(e => e.severity === 'medium').length}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600">Session Duration</p>
+                                                <p className="font-semibold">
+                                                    {timelineData.length > 1 ? 
+                                                        `${Math.round((new Date(timelineData[0].timestamp).getTime() - 
+                                                        new Date(timelineData[timelineData.length - 1].timestamp).getTime()) / 60000)} min` 
+                                                        : 'N/A'
+                                                    }
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        {/* Timeline Modal Actions */}
+                        <div className="flex justify-end gap-3 mt-6">
+                            <Button
+                                onClick={() => { setShowTimelineModal(false); setTimelineData([]); }}
+                                variant="outline"
+                            >
+                                Close
+                            </Button>
                         </div>
                     </div>
                 </div>
