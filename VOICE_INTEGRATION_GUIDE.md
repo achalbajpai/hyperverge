@@ -115,7 +115,7 @@ http://localhost:8000/voice-integrity/
 ```bash
 cd /Users/achal/Downloads/aug7/sensai-ai
 source venv/bin/activate
-export HF_TOKEN=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
+export HF_TOKEN=
 uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
