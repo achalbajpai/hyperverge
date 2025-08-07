@@ -274,6 +274,7 @@ async def get_integrity_flag(flag_id: int) -> Optional[IntegrityFlag]:
 async def get_integrity_flags_with_details(
     status: Optional[IntegrityFlagStatus] = None,
     severity: Optional[IntegritySeverity] = None,
+    flag_type: Optional[IntegrityFlagType] = None,
     limit: int = 50,
     offset: int = 0,
 ) -> List[IntegrityFlagWithDetails]:
@@ -304,6 +305,10 @@ async def get_integrity_flags_with_details(
     if severity:
         query += " AND f.severity = ?"
         params.append(severity.value)
+    
+    if flag_type:
+        query += " AND f.flag_type = ?"
+        params.append(flag_type.value)
     
     query += " ORDER BY f.created_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
