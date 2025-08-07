@@ -344,12 +344,12 @@ export default function ProctoringInterface({
 
     if (minimized) {
         return (
-            <div className="fixed bottom-4 right-4 z-50">
-                <Card className="p-3 bg-white shadow-lg border-2">
+            <div className="fixed z-50 bottom-4 right-4">
+                <Card className="p-3 bg-white border-2 shadow-lg">
                     <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4" />
+                        <Shield className="w-4 h-4" />
                         <span className="text-sm font-medium">
-                            {isActive ? 'Monitoring Active' : 'Not Monitoring'}
+                            {isActive ? 'Monitoring Active' : ' Monitoring'}
                         </span>
                         <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'}`} />
                         {isActive && (
@@ -369,11 +369,11 @@ export default function ProctoringInterface({
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <Shield className="h-5 w-5" />
+                        <Shield className="w-5 h-5" />
                         <h3 className="text-lg font-semibold">Integrity Monitoring</h3>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Wifi className="h-4 w-4" />
+                        <Wifi className="w-4 h-4" />
                         <span className={`text-sm ${getConnectionStatusColor()}`}>
                             {connectionStatus}
                         </span>
@@ -404,7 +404,7 @@ export default function ProctoringInterface({
                             className="flex items-center gap-2"
                             disabled={!user?.id}
                         >
-                            <Play className="h-4 w-4" />
+                            <Play className="w-4 h-4" />
                             Start Monitoring
                         </Button>
                     ) : (
@@ -413,7 +413,7 @@ export default function ProctoringInterface({
                             variant="outline"
                             className="flex items-center gap-2"
                         >
-                            <Square className="h-4 w-4" />
+                            <Square className="w-4 h-4" />
                             Stop Monitoring
                         </Button>
                     )}
@@ -425,8 +425,8 @@ export default function ProctoringInterface({
                         <div className="text-sm font-medium text-gray-700">Recent Alerts</div>
                         <div className="space-y-1">
                             {alerts.map((alert, index) => (
-                                <div key={index} className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                                    <AlertTriangle className="h-4 w-4" />
+                                <div key={index} className="flex items-center gap-2 p-2 text-sm rounded text-amber-600 bg-amber-50">
+                                    <AlertTriangle className="w-4 h-4" />
                                     {alert}
                                 </div>
                             ))}
@@ -436,7 +436,7 @@ export default function ProctoringInterface({
 
                 {/* Session Info */}
                 {session && (
-                    <div className="text-xs text-gray-500 border-t pt-3">
+                    <div className="pt-3 text-xs text-gray-500 border-t">
                         <div>Session ID: {session.session_id.slice(0, 8)}...</div>
                         <div>Started: {session.started_at ? new Date(session.started_at).toLocaleTimeString() : 'Unknown'}</div>
                     </div>

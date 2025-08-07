@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ConfidenceCalculator, ConfidenceFactors, ConfidenceBreakdown } from '../confidence-calculator';
 
 // Nebius AI configuration
 const NEBIUS_AI_API_URL = 'https://api.studio.nebius.ai/v1/chat/completions';
@@ -42,6 +43,15 @@ interface CheatingAnalysis {
       score: number;
       notes: string;
     };
+  };
+}
+
+interface EnhancedAnalysisResponse extends CheatingAnalysis {
+  confidence_breakdown: ConfidenceBreakdown;
+  recommended_action: {
+    action: string;
+    priority: 'immediate' | 'high' | 'medium' | 'low' | 'verify';
+    explanation: string;
   };
 }
 
@@ -126,8 +136,14 @@ export async function POST(request: NextRequest) {
       redFlagsCount: parsedAnalysis.red_flags?.length || 0
     });
 
-    // If cheating probability is high, create an integrity flag
-    if (parsedAnalysis.cheating_probability > 0.7) {
+    // If cheating probability is moderate or high, create an integrity flag
+    if (parsedAnalysis.cheating_probability > 0.1 || parsedAnalysis.red_flags?.length >= 3) {
+      console.log(`🔍 Creating integrity flag for Q${questionId}:`, {
+        cheating_probability: parsedAnalysis.cheating_probability,
+        red_flags: parsedAnalysis.red_flags?.length,
+        userId
+      });
+      
       await createIntegrityFlag({
         userId: userId, // Keep as string, function will convert to number
         questionId,
@@ -135,17 +151,52 @@ export async function POST(request: NextRequest) {
         answer,
         submissionContext
       });
+    } else {
+      console.log(`ℹ️ No flag created for Q${questionId}:`, {
+        cheating_probability: parsedAnalysis.cheating_probability,
+        red_flags: parsedAnalysis.red_flags?.length,
+        threshold: 'Below 0.3 and < 3 red flags'
+      });
     }
+
+    // Calculate enhanced confidence score with detailed breakdown
+    const confidenceFactors: ConfidenceFactors = {
+      contentQuality: parsedAnalysis.analysis_details?.content_quality?.score || 0.5,
+      writingStyle: parsedAnalysis.analysis_details?.writing_style?.score || 0.5,
+      answerComplexity: parsedAnalysis.analysis_details?.answer_complexity?.score || 0.5,
+      timeAnalysis: parsedAnalysis.analysis_details?.time_analysis?.score || 0.5,
+      patternDetection: parsedAnalysis.cheating_probability // Use cheating probability as pattern detection confidence
+    };
+
+    const confidenceBreakdown = ConfidenceCalculator.calculateConfidence(
+      confidenceFactors,
+      parsedAnalysis.red_flags?.length || 0,
+      parsedAnalysis.cheating_probability
+    );
+
+    const recommendedAction = ConfidenceCalculator.getRecommendedAction(
+      confidenceBreakdown.confidenceLevel
+    );
+
+    // Create enhanced analysis response
+    const enhancedAnalysis: EnhancedAnalysisResponse = {
+      ...parsedAnalysis,
+      confidence_level: confidenceBreakdown.finalConfidence, // Use calculated confidence
+      confidence_breakdown: confidenceBreakdown,
+      recommended_action: recommendedAction
+    };
 
     return NextResponse.json({
       success: true,
-      analysis: parsedAnalysis,
+      analysis: enhancedAnalysis,
       metadata: {
         questionId,
         userId,
         timestamp: new Date().toISOString(),
         answerLength: answer.length,
-        wordCount: submissionContext?.wordCount || 0
+        wordCount: submissionContext?.wordCount || 0,
+        confidence_explanation: confidenceBreakdown.explanation,
+        confidence_level_text: confidenceBreakdown.confidenceLevel.replace('_', ' ').toUpperCase()
       }
     });
 

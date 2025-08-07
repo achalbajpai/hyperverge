@@ -393,6 +393,7 @@ function AssessmentContent() {
                     audio_data: base64Audio,
                     audio_format: combinedBlob.type,
                     session_id: sessionId,
+                    user_id: session?.user?.id || '1',
                     test_duration_minutes: Math.round((Date.now() - startTime.getTime()) / 60000),
                     assignment_id: assignmentId
                 })
@@ -965,22 +966,22 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
         }, 5000);
 
         return (
-            <div className="min-h-screen flex items-center justify-center bg-black">
+            <div className="flex items-center justify-center min-h-screen bg-black">
                 <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-8 border-b-2 border-green-500 border-opacity-70 max-w-2xl mx-auto text-center">
-                    <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
-                    <h2 className="text-2xl font-light text-white mb-4">Assessment Submitted Successfully!</h2>
-                    <p className="text-gray-400 mb-4">
+                    <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-400" />
+                    <h2 className="mb-4 text-2xl font-light text-white">Assessment Submitted Successfully!</h2>
+                    <p className="mb-4 text-gray-400">
                         Your answers have been submitted and are being processed with AI-powered integrity analysis.
                     </p>
-                    <div className="bg-blue-900 border border-blue-500 rounded-lg p-4 mb-6">
-                        <p className="text-blue-200 text-sm">
+                    <div className="p-4 mb-6 bg-blue-900 border border-blue-500 rounded-lg">
+                        <p className="text-sm text-blue-200">
                             <strong>What happens next:</strong><br />
                             • Your responses are analyzed for plagiarism and integrity<br />
                             • Results are reviewed by our academic team<br />
                             • You'll receive an email with your detailed report soon
                         </p>
                     </div>
-                    <p className="text-sm text-gray-500 mb-6">
+                    <p className="mb-6 text-sm text-gray-500">
                         Session ID: {sessionId?.substring(0, 8)}...
                     </p>
                     <div className="space-y-3">
@@ -997,7 +998,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                             Return to Dashboard
                         </Button>
                     </div>
-                    <p className="text-xs text-gray-500 mt-4">
+                    <p className="mt-4 text-xs text-gray-500">
                         You will be automatically redirected to your dashboard in 10 seconds...
                     </p>
                 </div>
@@ -1007,7 +1008,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-black">
+            <div className="flex items-center justify-center min-h-screen bg-black">
                 <div className="w-12 h-12 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
             </div>
         );
@@ -1017,8 +1018,8 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
         <div className="min-h-screen bg-black">
             {/* Assessment Header */}
             <div className="bg-[#1A1A1A] border-b border-gray-800 sticky top-0 z-10">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center py-4">
+                <div className="max-w-5xl px-4 mx-auto sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between py-4">
                         <div className="flex items-center space-x-4">
                             <Button
                                 variant="ghost"
@@ -1029,7 +1030,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                                 <ArrowLeft className="w-4 h-4 mr-2" />
                                 Back to Dashboard
                             </Button>
-                            <div className="h-6 w-px bg-gray-600"></div>
+                            <div className="w-px h-6 bg-gray-600"></div>
                             <div>
                                 <h1 className="text-xl font-light text-white">
                                     {assignmentTitle || assessmentData?.title || 'Programming Assessment'}
@@ -1048,7 +1049,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                             </div>
                             
                             {/* Question progress */}
-                            <div className="text-sm text-gray-300 bg-gray-800 px-3 py-1 rounded-full">
+                            <div className="px-3 py-1 text-sm text-gray-300 bg-gray-800 rounded-full">
                                 Question {currentQuestion + 1} of {questions.length}
                             </div>
                             
@@ -1064,7 +1065,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                 </div>
             </div>
 
-            <div className="container mx-auto py-8">
+            <div className="container py-8 mx-auto">
                 {/* Camera Feed - Small floating window */}
                 {cameraStream && (
                     <div className="fixed top-20 right-4 z-40 bg-[#1A1A1A] border border-gray-600 rounded-lg overflow-hidden shadow-lg">
@@ -1079,11 +1080,11 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                             ref={videoRef}
                             autoPlay
                             muted
-                            className="w-48 h-36 object-cover"
+                            className="object-cover w-48 h-36"
                         />
-                        <div className="p-1 bg-gray-800 flex items-center justify-between">
+                        <div className="flex items-center justify-between p-1 bg-gray-800">
                             <span className={`text-xs ${cameraStream ? 'text-green-400' : 'text-red-400'}`}>
-                                {cameraStream ? 'Monitoring Active' : 'Not Monitoring'}
+                                {cameraStream ? 'Monitoring Active' : ' Monitoring'}
                             </span>
                             {isRecordingAudio && (
                                 <div className="flex items-center space-x-1">
@@ -1098,13 +1099,13 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
 
                 {/* Warning System */}
                 {warnings.length > 0 && (
-                    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2">
+                    <div className="fixed z-50 space-y-2 transform -translate-x-1/2 top-4 left-1/2">
                         {warnings.map((warning, index) => (
                             <div
                                 key={index}
-                                className="bg-yellow-900 border border-yellow-500 text-yellow-200 px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3"
+                                className="flex items-center px-4 py-3 space-x-3 text-yellow-200 bg-yellow-900 border border-yellow-500 rounded-lg shadow-lg"
                             >
-                                <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                                <AlertTriangle className="flex-shrink-0 w-5 h-5" />
                                 <span className="text-sm">{warning}</span>
                             </div>
                         ))}
@@ -1121,7 +1122,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                 <div className="max-w-4xl mx-auto">
                     <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-indigo-500 border-opacity-70">
                         <div className="mb-6">
-                            <h2 className="text-xl font-light text-white mb-4">{questions[currentQuestion].title}</h2>
+                            <h2 className="mb-4 text-xl font-light text-white">{questions[currentQuestion].title}</h2>
                         </div>
                         <div className="space-y-4">
                             <p className="text-gray-300">
@@ -1129,17 +1130,17 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                             </p>
                             
                             <div>
-                                <label className="block text-sm font-light text-white mb-2">
+                                <label className="block mb-2 text-sm font-light text-white">
                                     Your Answer:
                                 </label>
                                 <textarea
-                                    className="w-full h-48 p-4 border border-gray-600 rounded-lg bg-gray-800 text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    className="w-full h-48 p-4 text-white placeholder-gray-400 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                     placeholder="Type your answer here..."
                                     value={answers[currentQuestion] || ''}
                                     onChange={(e) => handleAnswerChange(e.target.value, currentQuestion)}
                                     onPaste={(e) => handlePaste(e, currentQuestion)}
                                 />
-                                <p className="text-sm text-gray-400 mt-1">
+                                <p className="mt-1 text-sm text-gray-400">
                                     Expected time: {questions[currentQuestion].expected_time} minutes
                                 </p>
                             </div>
@@ -1150,7 +1151,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                                 variant="outline"
                                 disabled={currentQuestion === 0}
                                 onClick={() => setCurrentQuestion(currentQuestion - 1)}
-                                className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                                className="text-gray-300 border-gray-600 hover:bg-gray-700"
                             >
                                 Previous
                             </Button>
@@ -1169,7 +1170,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                                 >
                                     {isSubmitting ? (
                                         <>
-                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                                            <div className="w-4 h-4 mr-2 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
                                             Processing Submission...
                                         </>
                                     ) : (
@@ -1181,9 +1182,9 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                     </div>
 
                     {/* Progress indicator */}
-                    <div className="mt-4 bg-gray-700 rounded-full h-2">
+                    <div className="h-2 mt-4 bg-gray-700 rounded-full">
                         <div
-                            className="bg-indigo-500 h-2 rounded-full transition-all duration-300"
+                            className="h-2 transition-all duration-300 bg-indigo-500 rounded-full"
                             style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
                         />
                     </div>
@@ -1196,7 +1197,7 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
 export default function StudentAssessmentPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center bg-black">
+            <div className="flex items-center justify-center min-h-screen bg-black">
                 <div className="w-12 h-12 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
             </div>
         }>
