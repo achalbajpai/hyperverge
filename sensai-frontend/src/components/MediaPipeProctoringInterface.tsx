@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Card } from './ui/card';
 import { AlertTriangle, Eye, Users, Camera, Smartphone, Shield } from 'lucide-react';
 import { MEDIAPIPE_OPTIMAL_CONFIG, VIOLATION_SEVERITY_MAPPING, MediaPipeOptimalConfig } from '../config/mediapipe-optimal-config';
+import { MEDIAPIPE_SOLUTIONS_CONFIG } from '../config/mediapipe-solutions-config';
 
 // MediaPipe interfaces
 interface MediaPipeResults {
@@ -153,8 +154,19 @@ export default function MediaPipeProctoringInterface({
   }, [isActive, holistic, videoRef]);
 
   // Optimized MediaPipe results handler with frame skipping and smoothing
+  // 🔍 DEBUG: MediaPipe results processing with multiple people detection
   const onMediaPipeResults = useCallback((results: any) => {
     if (!canvasRef.current || !videoRef.current || processingActive.current) return;
+    
+    console.log('🔍 MEDIAPIPE RESULTS RECEIVED:', {
+      hasFaceLandmarks: !!results.faceLandmarks,
+      faceCount: results.faceLandmarks ? results.faceLandmarks.length : 0,
+      hasPose: !!results.poseLandmarks,
+      poseCount: results.poseLandmarks ? results.poseLandmarks.length : 0,
+      hasLeftHand: !!results.leftHandLandmarks,
+      hasRightHand: !!results.rightHandLandmarks,
+      frameNumber: frameProcessingCounter.current
+    });
     
     // Performance optimization: Process every Nth frame based on config (50% CPU reduction by default)
     frameProcessingCounter.current++;
@@ -179,32 +191,39 @@ export default function MediaPipeProctoringInterface({
 
       // Handle calibration phase (configurable frames for baseline establishment)
       if (calibrationFrames.current < MEDIAPIPE_OPTIMAL_CONFIG.calibration.calibrationDurationFrames) {
+        console.log('🔧 CALIBRATION PHASE:', calibrationFrames.current);
         handleCalibrationPhase(results);
         calibrationFrames.current++;
         return;
       }
 
       if (!isCalibrated.current && calibrationFrames.current >= MEDIAPIPE_OPTIMAL_CONFIG.calibration.calibrationDurationFrames) {
+        console.log('✅ FINALIZING CALIBRATION');
         finalizeCalibration();
         isCalibrated.current = true;
       }
 
+      // 🚨 CRITICAL: Process multiple people detection FIRST
+      // This detects MediaPipe Holistic interference scenarios
+      console.log('🔍 STARTING MULTIPLE PEOPLE DETECTION');
+      processMultiplePeopleDetection(results, ctx);
+
       // Process face landmarks with stabilization
       if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+        console.log('✅ PROCESSING FACE DETECTION:', results.faceLandmarks.length, 'landmarks');
         processFaceDetectionStabilized(results.faceLandmarks, ctx);
         if (isCalibrated.current) {
           processGazeTrackingSmooth(results.faceLandmarks, ctx);
           processEyeTrackingCalibrated(results.faceLandmarks, ctx);
         }
       } else {
+        console.log('❌ NO FACE LANDMARKS - triggering no face handler');
         handleNoFaceDetectedStabilized();
       }
 
-      // Process pose for multiple people detection
-      processMultiplePeopleDetection(results, ctx);
-
       // Process hands for object detection
       if (results.leftHandLandmarks || results.rightHandLandmarks) {
+        console.log('👋 PROCESSING HAND DETECTION');
         processHandDetection(results, ctx);
       }
 
@@ -252,7 +271,10 @@ export default function MediaPipeProctoringInterface({
   };
 
   // Stabilized face detection with configurable frame confirmation
+  // 🔍 DEBUG: Handle no face detection with multiple people awareness
   const handleNoFaceDetectedStabilized = () => {
+    console.log('🔍 NO FACE DETECTED - analyzing scenario');
+    
     faceDetectionHistory.current.push(false);
     if (faceDetectionHistory.current.length > MEDIAPIPE_OPTIMAL_CONFIG.faceDetection.absenceConfirmationFrames) {
       faceDetectionHistory.current.shift();
@@ -260,16 +282,32 @@ export default function MediaPipeProctoringInterface({
     
     // Require configured consecutive frames without face to trigger violation
     const noFaceFrames = faceDetectionHistory.current.filter(detected => !detected).length;
+    const consecutiveNoFaceFrames = faceDetectionHistory.current.slice(-5).every(detected => !detected);
+    
+    console.log('📊 NO FACE ANALYSIS:', {
+      noFaceFrames,
+      consecutiveNoFaceFrames,
+      requiredFrames: MEDIAPIPE_OPTIMAL_CONFIG.faceDetection.absenceConfirmationFrames,
+      lastFaceCount: lastFaceCount.current
+    });
     
     setStats(prev => ({ ...prev, facesDetected: 0 }));
     
-    if (noFaceFrames >= MEDIAPIPE_OPTIMAL_CONFIG.faceDetection.absenceConfirmationFrames) {
-      createViolationOptimized('face_detection', 'high', 'No face detected in camera view', 
+    // Only trigger violation if we had a stable detection before
+    // This prevents false positives when multiple people cause MediaPipe interference
+    if (noFaceFrames >= MEDIAPIPE_OPTIMAL_CONFIG.faceDetection.absenceConfirmationFrames && 
+        consecutiveNoFaceFrames &&
+        lastFaceCount.current > 0) {
+      
+      console.log('🚨 TRIGGERING NO FACE VIOLATION');
+      createViolationOptimized('face_detection', 'high', 
+        'No face detected in camera view - student may have left or multiple people interference', 
         MEDIAPIPE_OPTIMAL_CONFIG.faceDetection.confidenceThreshold, {
         facesDetected: 0,
         confirmationFrames: noFaceFrames,
         timestamp: new Date().toISOString(),
-        config: 'optimal_thresholds'
+        config: 'optimal_thresholds',
+        possibleCause: lastFaceCount.current === 1 ? 'student_absence_or_multiple_people' : 'detection_failure'
       });
     }
   };
@@ -511,19 +549,38 @@ export default function MediaPipeProctoringInterface({
 
   // Remove mouth movement processing - not requested in requirements
 
-  // Multiple people detection
+  // 🔍 DEBUG: Multiple people detection with MediaPipe Holistic limitations
   const processMultiplePeopleDetection = (results: any, ctx: CanvasRenderingContext2D) => {
+    console.log('🔍 MULTIPLE PEOPLE DETECTION:', {
+      faceLandmarks: results.faceLandmarks ? results.faceLandmarks.length : 0,
+      poseLandmarks: results.poseLandmarks ? results.poseLandmarks.length : 0,
+      leftHandLandmarks: results.leftHandLandmarks ? results.leftHandLandmarks.length : 0,
+      rightHandLandmarks: results.rightHandLandmarks ? results.rightHandLandmarks.length : 0
+    });
+
     let peopleCount = 0;
     let detectionMethods = [];
+    let detectionQuality = 0;
     
-    // Count faces
+    // ⚠️ CRITICAL FIX: MediaPipe Holistic can only detect ONE person at a time
+    // When multiple people are present, it often returns NO results instead of multiple
+    // We need to detect this scenario and handle it appropriately
+    
+    // Count faces (MediaPipe Holistic limitation: max 1 face)
     if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-      peopleCount += 1;
+      peopleCount = 1;
       detectionMethods.push('face_landmarks');
+      detectionQuality += 0.4;
+      console.log('🎯 FACE DETECTED:', results.faceLandmarks.length, 'landmarks');
     }
 
-    // Additional pose detection for multiple people
+    // Check pose detection (MediaPipe Holistic limitation: max 1 pose)  
     if (results.poseLandmarks && results.poseLandmarks.length > 0) {
+      peopleCount = Math.max(peopleCount, 1);
+      detectionMethods.push('pose_landmarks');
+      detectionQuality += 0.3;
+      console.log('🏃 POSE DETECTED:', results.poseLandmarks.length, 'landmarks');
+      
       // Draw pose landmarks
       ctx.strokeStyle = '#FFFF00';
       ctx.lineWidth = 2;
@@ -536,15 +593,83 @@ export default function MediaPipeProctoringInterface({
         ctx.arc(x, y, 3, 0, 2 * Math.PI);
         ctx.fill();
       });
-
-      // Use pose landmarks to confirm person count
-      peopleCount = Math.max(peopleCount, 1);
-      detectionMethods.push('pose_landmarks');
     }
 
-    // Check for multiple people violation
+    // Check hand detection for additional person indicators
+    const hasLeftHand = results.leftHandLandmarks && results.leftHandLandmarks.length > 0;
+    const hasRightHand = results.rightHandLandmarks && results.rightHandLandmarks.length > 0;
+    
+    if (hasLeftHand || hasRightHand) {
+      detectionMethods.push('hand_landmarks');
+      detectionQuality += 0.3;
+      console.log('👋 HANDS DETECTED:', { left: hasLeftHand, right: hasRightHand });
+    }
+
+    console.log('📊 DETECTION SUMMARY:', { 
+      peopleCount, 
+      detectionMethods, 
+      detectionQuality,
+      lastFaceCount: lastFaceCount.current 
+    });
+
+    // ⚠️ CRITICAL: Handle MediaPipe Holistic's multiple people limitation
+    // When MediaPipe suddenly loses all landmarks, it might indicate multiple people
+    const completeDetectionLoss = (
+      !results.faceLandmarks && 
+      !results.poseLandmarks && 
+      !results.leftHandLandmarks && 
+      !results.rightHandLandmarks
+    );
+
+    if (completeDetectionLoss && lastFaceCount.current === 1) {
+      // Check configuration to see if multiple people should be treated as violations
+      const config = MEDIAPIPE_SOLUTIONS_CONFIG.multiplePeopleDetection;
+      
+      if (config.treatMultipleAsViolation) {
+        // Only report as violation if configured to do so
+        console.log('🚨 MULTIPLE PEOPLE DETECTED: Configured as violation');
+        
+        createViolationOptimized('multiple_people', 'high', 
+          `Multiple people detected: ${lastFaceCount.current || 'unknown'} faces`, 0.8, {
+          peopleCount: lastFaceCount.current || 'unknown_multiple',
+          reason: 'multiple_people_not_allowed',
+          detectionMethods: ['interference_detection'],
+          previousDetectionQuality: detectionQuality,
+          confidence: 0.8,
+          configuredAsViolation: true
+        });
+      } else {
+        // Multiple people allowed - just log for information
+        console.log('ℹ️ MULTIPLE PEOPLE DETECTED: Allowed by configuration - not reporting as violation');
+        
+        // Optional: Create informational log instead of violation
+        if (config.debugMode) {
+          console.log('📊 Multiple people detection info:', {
+            peopleCount: lastFaceCount.current || 'unknown_multiple',
+            reason: 'multiple_people_allowed',
+            configuredAsViolation: false,
+            detectionQuality
+          });
+        }
+      }
+      
+      // Only increment violation count if treating as violation
+      if (config.treatMultipleAsViolation) {
+        setStats(prev => ({ 
+          ...prev, 
+          multiplePeopleViolations: prev.multiplePeopleViolations + 1 
+        }));
+      }
+      
+      // Don't reset lastFaceCount immediately to track this state
+      return;
+    }
+
+    // Normal multiple people detection (unlikely with Holistic but handle anyway)
     if (peopleCount > 1 && peopleCount !== lastFaceCount.current) {
-      createViolationOptimized('multiple_people', 'critical', `Multiple people detected: ${peopleCount} individuals in camera view`, 0.95, {
+      console.log('👥 MULTIPLE PEOPLE VIOLATION:', peopleCount);
+      createViolationOptimized('multiple_people', 'critical', 
+        `Multiple people detected: ${peopleCount} individuals in camera view`, 0.95, {
         peopleCount,
         detectionMethods,
         confidence: 0.95
@@ -556,17 +681,21 @@ export default function MediaPipeProctoringInterface({
       }));
       
       lastFaceCount.current = peopleCount;
+    } else if (peopleCount === 1) {
+      // Single person detected - good state
+      console.log('✅ SINGLE PERSON DETECTED');
+      lastFaceCount.current = 1;
     } else if (peopleCount === 0 && lastFaceCount.current !== 0) {
-      // Person disappeared from view
-      createViolationOptimized('multiple_people', 'high', 'No people detected in camera view - student may have left', 0.9, {
+      // Complete absence - different from multiple people interference
+      console.log('❌ NO PEOPLE DETECTED');
+      createViolationOptimized('face_detection', 'high', 
+        'No people detected in camera view - student may have left', 0.9, {
         peopleCount: 0,
         previousCount: lastFaceCount.current,
         detectionMethods: ['absence_detection']
       });
       
       lastFaceCount.current = 0;
-    } else if (peopleCount === 1) {
-      lastFaceCount.current = 1;
     }
   };
 

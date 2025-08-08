@@ -7,7 +7,10 @@ import {
   EYE_LANDMARKS,
   FACE_LANDMARKS,
   type ViolationType,
-  type ViolationSeverity 
+  type ViolationSeverity,
+  type FaceTrackingData,
+  type MultipleFaceDetectionResult,
+  type PrimaryPersonSelectionStrategy
 } from '../config/mediapipe-solutions-config';
 
 // MediaPipe Solutions imports
@@ -159,10 +162,10 @@ export default function MediaPipeSolutionsProctoringInterface({
       setFaceDetector(faceDetectorInstance);
 
       // Initialize Face Landmarker with optimal configuration
-      const faceLandmarkerInstance = await FaceLandmarker.createFromOptions(visionInstance, {
+      const faceLandmarkerOptions = {
         baseOptions: {
           modelAssetPath: MEDIAPIPE_SOLUTIONS_CONFIG.models.faceLandmarkerPath,
-          delegate: 'GPU'
+          delegate: 'GPU' as const
         },
         runningMode: MEDIAPIPE_SOLUTIONS_CONFIG.faceLandmarker.runningMode,
         numFaces: MEDIAPIPE_SOLUTIONS_CONFIG.faceLandmarker.numFaces,
@@ -171,7 +174,13 @@ export default function MediaPipeSolutionsProctoringInterface({
         minTrackingConfidence: MEDIAPIPE_SOLUTIONS_CONFIG.faceLandmarker.minTrackingConfidence,
         outputFaceBlendshapes: MEDIAPIPE_SOLUTIONS_CONFIG.faceLandmarker.outputFaceBlendshapes,
         outputFacialTransformationMatrixes: MEDIAPIPE_SOLUTIONS_CONFIG.faceLandmarker.outputFacialTransformationMatrixes
-      });
+      };
+
+      // ✅ CRITICAL DEBUG STEP: Log the options to be 100% sure
+      console.log("🔍 INTERFACE INITIALIZING FACELANDMARKER WITH OPTIONS:", faceLandmarkerOptions);
+      console.log("🎯 Interface numFaces setting:", MEDIAPIPE_SOLUTIONS_CONFIG.faceLandmarker.numFaces);
+
+      const faceLandmarkerInstance = await FaceLandmarker.createFromOptions(visionInstance, faceLandmarkerOptions);
       setFaceLandmarker(faceLandmarkerInstance);
 
       // Initialize Pose Landmarker with optimal configuration
@@ -305,14 +314,49 @@ export default function MediaPipeSolutionsProctoringInterface({
       return;
     }
 
-    // Handle calibration phase
+    const config = MEDIAPIPE_SOLUTIONS_CONFIG.multiplePeopleDetection;
+    
+    // Handle multiple faces detection
+    if (results.faceLandmarks.length > 1) {
+      if (config.debugMode) {
+        console.log(`🎯 INTERFACE: Multiple faces detected (${results.faceLandmarks.length}), treatMultipleAsViolation: ${config.treatMultipleAsViolation}`);
+      }
+      
+      // Update face count in stats
+      setStats(prev => ({ ...prev, facesDetected: results.faceLandmarks.length }));
+      
+      // Only treat as violation if configured to do so
+      if (config.treatMultipleAsViolation) {
+        await createThrottledViolation(
+          'multiple_people',
+          'high',
+          `Multiple faces detected: ${results.faceLandmarks.length}`,
+          0.9,
+          {
+            faceCount: results.faceLandmarks.length,
+            configuredAsViolation: true,
+            timestamp: new Date().toISOString()
+          }
+        );
+        
+        setStats(prev => ({ 
+          ...prev, 
+          multiplePeopleViolations: prev.multiplePeopleViolations + 1 
+        }));
+      }
+    } else {
+      // Single face detected
+      setStats(prev => ({ ...prev, facesDetected: 1 }));
+    }
+
+    // Handle calibration phase (use first/primary face)
     if (!calibration.isCalibrated) {
       await handleCalibrationPhase(results, ctx);
       return;
     }
 
-    // Process face landmarks for violations
-    const faceLandmarks = results.faceLandmarks[0]; // Process first face
+    // Process face landmarks for violations (use primary/first face)
+    const faceLandmarks = results.faceLandmarks[0]; // Process primary face
     
     // Face positioning and size validation
     await validateFacePosition(faceLandmarks, ctx);
@@ -348,26 +392,42 @@ export default function MediaPipeSolutionsProctoringInterface({
     if (!results.landmarks) return;
 
     const poseCount = results.landmarks.length;
+    const config = MEDIAPIPE_SOLUTIONS_CONFIG.multiplePeopleDetection;
     
     if (poseCount > 1) {
-      await createThrottledViolation(
-        'multiple_people',
-        'high',
-        `${poseCount} people detected in camera view`,
-        0.9,
-        {
-          poseCount,
-          landmarks: results.landmarks.map(pose => pose.length),
-          timestamp: new Date().toISOString()
+      // Only treat as violation if configured to do so
+      if (config.treatMultipleAsViolation) {
+        await createThrottledViolation(
+          'multiple_people',
+          'high',
+          `${poseCount} people detected in camera view`,
+          0.9,
+          {
+            poseCount,
+            landmarks: results.landmarks.map(pose => pose.length),
+            timestamp: new Date().toISOString(),
+            configuredAsViolation: true
+          }
+        );
+        
+        setStats(prev => ({ 
+          ...prev, 
+          multiplePeopleViolations: prev.multiplePeopleViolations + 1 
+        }));
+      } else {
+        // Multiple people allowed - just log for information
+        if (config.debugMode) {
+          console.log(`ℹ️ MULTIPLE PEOPLE ALLOWED: ${poseCount} people detected (not a violation)`);
         }
-      );
-      
-      setStats(prev => ({ 
-        ...prev, 
-        multiplePeopleViolations: prev.multiplePeopleViolations + 1 
-      }));
+        
+        // Update stats but don't increment violations
+        setStats(prev => ({ 
+          ...prev, 
+          facesDetected: poseCount // Update face count to reflect multiple people
+        }));
+      }
     }
-  }, []);
+  }, [createThrottledViolation]);
 
   /**
    * Handle calibration phase with progress tracking
@@ -1009,8 +1069,8 @@ export default function MediaPipeSolutionsProctoringInterface({
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
+        {/* Enhanced Stats Display */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="text-center">
             <div className="text-sm text-gray-600">Faces</div>
             <div className={`font-bold text-lg ${stats.facesDetected > 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -1018,14 +1078,42 @@ export default function MediaPipeSolutionsProctoringInterface({
             </div>
           </div>
           <div className="text-center">
-            <div className="text-sm text-gray-600">Violations</div>
-            <div className={`font-bold text-lg ${stats.totalViolations === 0 ? 'text-green-600' : 'text-yellow-600'}`}>
+            <div className="text-sm text-gray-600">Gaze</div>
+            <div className={`font-bold text-lg ${stats.gazeViolations === 0 ? 'text-green-600' : 'text-yellow-600'}`}>
+              {stats.gazeViolations}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-sm text-gray-600">Eyes</div>
+            <div className={`font-bold text-lg ${stats.eyeMovementViolations === 0 ? 'text-green-600' : 'text-yellow-600'}`}>
+              {stats.eyeMovementViolations}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-sm text-gray-600">People</div>
+            <div className={`font-bold text-lg ${stats.multiplePeopleViolations === 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {stats.multiplePeopleViolations}
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Stats Row */}
+        <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="text-center">
+            <div className="text-xs text-gray-500">Total Violations</div>
+            <div className={`font-semibold ${stats.totalViolations === 0 ? 'text-green-600' : 'text-yellow-600'}`}>
               {stats.totalViolations}
             </div>
           </div>
           <div className="text-center">
-            <div className="text-sm text-gray-600">Performance</div>
-            <div className="font-bold text-lg text-blue-600">
+            <div className="text-xs text-gray-500">Objects</div>
+            <div className={`font-semibold ${stats.objectViolations === 0 ? 'text-green-600' : 'text-yellow-600'}`}>
+              {stats.objectViolations}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-gray-500">Performance</div>
+            <div className="font-semibold text-blue-600">
               {Math.round(stats.performanceMetrics.averageProcessingTime)}ms
             </div>
           </div>

@@ -24,7 +24,7 @@ export interface MediaPipeSolutionsConfig {
   // Face Landmarker Configuration (478 landmarks with blendshapes)
   faceLandmarker: {
     runningMode: 'IMAGE' | 'VIDEO';
-    numFaces: number;                      // 1 - enable smoothing
+    numFaces: number;                      // 5 - detect multiple faces
     minFaceDetectionConfidence: number;    // 0.7 - higher than default 0.5
     minFacePresenceConfidence: number;     // 0.7 - higher than default 0.5
     minTrackingConfidence: number;         // 0.7 - higher than default 0.5
@@ -35,7 +35,7 @@ export interface MediaPipeSolutionsConfig {
   // Pose Landmarker Configuration (33 body landmarks)
   poseLandmarker: {
     runningMode: 'IMAGE' | 'VIDEO';
-    numPoses: number;                      // 2 - detect multiple people
+    numPoses: number;                      // 5 - detect multiple people
     minPoseDetectionConfidence: number;    // 0.7 - higher than default 0.5
     minPosePresenceConfidence: number;     // 0.7 - higher than default 0.5
     minTrackingConfidence: number;         // 0.7 - higher than default 0.5
@@ -127,6 +127,28 @@ export interface MediaPipeSolutionsConfig {
     faceLandmarkerPath: string;            // Face landmarker model  
     poseLandmarkerPath: string;            // Pose landmarker model
   };
+
+  // Multiple People Detection Configuration
+  multiplePeopleDetection: {
+    enabled: boolean;                      // Enable multiple people detection
+    maxPeople: number;                     // Maximum number of people to track
+    treatMultipleAsViolation: boolean;     // Whether to report multiple people as violation
+    primaryPersonSelection: 'largest' | 'center' | 'first' | 'most_stable'; // How to select primary person
+    showAllPeople: boolean;                // Whether to show all detected people
+    colorCoding: {
+      primary: string;                     // Color for primary person
+      secondary: string;                   // Color for other people
+      violation: string;                   // Color for violation highlighting
+    };
+    confidenceThreshold: number;           // Minimum confidence for person detection
+    stabilityFrames: number;               // Frames to track stability for primary selection
+    stabilityThreshold: number;            // Minimum stability score for primary person
+    faceTrackingContinuity: boolean;       // Enable face tracking continuity
+    minFaceSize: number;                   // Minimum relative face size for detection
+    maxFaceSize: number;                   // Maximum relative face size for detection
+    adaptiveConfidence: boolean;           // Use adaptive confidence thresholds
+    debugMode: boolean;                    // Enable comprehensive debug logging
+  };
 }
 
 /**
@@ -144,7 +166,7 @@ export const MEDIAPIPE_SOLUTIONS_CONFIG: MediaPipeSolutionsConfig = {
   // Face Landmarker with 478 landmarks
   faceLandmarker: {
     runningMode: 'VIDEO',
-    numFaces: 1,                           // Enable smoothing (only works with 1 face)
+    numFaces: 5,                           // Detect up to 5 faces for multiple people
     minFaceDetectionConfidence: 0.7,       // Higher than default 0.5
     minFacePresenceConfidence: 0.7,        // Higher than default 0.5
     minTrackingConfidence: 0.7,            // Higher than default 0.5
@@ -155,7 +177,7 @@ export const MEDIAPIPE_SOLUTIONS_CONFIG: MediaPipeSolutionsConfig = {
   // Pose Landmarker with 33 landmarks
   poseLandmarker: {
     runningMode: 'VIDEO',
-    numPoses: 2,                           // Detect up to 2 people
+    numPoses: 5,                           // Detect up to 5 people
     minPoseDetectionConfidence: 0.7,       // Higher than default 0.5
     minPosePresenceConfidence: 0.7,        // Higher than default 0.5
     minTrackingConfidence: 0.7,            // Higher than default 0.5
@@ -246,6 +268,28 @@ export const MEDIAPIPE_SOLUTIONS_CONFIG: MediaPipeSolutionsConfig = {
     faceDetectorPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
     faceLandmarkerPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
     poseLandmarkerPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
+  },
+
+  // Multiple People Detection Configuration
+  multiplePeopleDetection: {
+    enabled: true,                         // Enable multiple people detection
+    maxPeople: 5,                          // Maximum number of people to track
+    treatMultipleAsViolation: false,       // Allow multiple people (don't treat as violation)
+    primaryPersonSelection: 'most_stable', // Select most stable face as primary
+    showAllPeople: true,                   // Show all detected people
+    colorCoding: {
+      primary: '#10b981',                  // Green for primary person
+      secondary: '#3b82f6',                // Blue for other people  
+      violation: '#ef4444'                 // Red for violation highlighting
+    },
+    confidenceThreshold: 0.6,              // Minimum confidence for person detection (lowered for better detection)
+    stabilityFrames: 15,                   // Track stability over 15 frames (0.5 seconds at 30fps)
+    stabilityThreshold: 0.8,               // Minimum stability score (80%)
+    faceTrackingContinuity: true,          // Enable face tracking continuity
+    minFaceSize: 0.12,                     // Minimum face size (12% of frame)
+    maxFaceSize: 0.7,                      // Maximum face size (70% of frame)
+    adaptiveConfidence: true,              // Use adaptive confidence thresholds
+    debugMode: true                        // Enable comprehensive debug logging
   }
 };
 
@@ -286,3 +330,38 @@ export const FACE_LANDMARKS = {
 
 export type ViolationType = 'face_detection' | 'gaze_tracking' | 'eye_movement' | 'mouth_movement' | 'multiple_people' | 'unauthorized_object';
 export type ViolationSeverity = keyof typeof VIOLATION_SEVERITY_MAPPING;
+
+/**
+ * Face tracking data for continuity tracking
+ */
+export interface FaceTrackingData {
+  id: string;                              // Unique face ID
+  landmarks: Array<{x: number, y: number}>; // Face landmarks
+  confidence: number;                      // Detection confidence
+  position: { x: number, y: number };     // Face center position
+  size: number;                           // Face size
+  stabilityScore: number;                 // Stability score (0-1)
+  framesSinceDetection: number;           // Frames since last detection
+  isPrimary: boolean;                     // Is this the primary face
+  lastSeen: number;                       // Timestamp of last detection
+}
+
+/**
+ * Primary person selection strategies
+ */
+export type PrimaryPersonSelectionStrategy = 'largest' | 'center' | 'first' | 'most_stable';
+
+/**
+ * Enhanced multiple face detection result
+ */
+export interface MultipleFaceDetectionResult {
+  faces: FaceTrackingData[];
+  primaryFaceId: string | null;
+  totalFacesDetected: number;
+  detectionQuality: number;
+  stabilityMetrics: {
+    averageStability: number;
+    primaryFaceStability: number;
+    faceTrackingContinuity: number;
+  };
+}
