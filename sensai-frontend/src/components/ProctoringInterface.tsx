@@ -13,6 +13,7 @@ import {
     ProctoringControls,
 } from '../types';
 import { useAuth } from '@/lib/auth';
+import FullscreenWarningSystem from './FullscreenWarningSystem';
 
 interface ProctoringInterfaceProps {
     taskId?: number;
@@ -35,6 +36,7 @@ export default function ProctoringInterface({
     const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
     const [integrityScore, setIntegrityScore] = useState<number>(1.0);
     const [alerts, setAlerts] = useState<string[]>([]);
+    const [violationCount, setViolationCount] = useState<number>(0);
     
     // Refs for tracking
     const wsRef = useRef<WebSocket | null>(null);
@@ -442,6 +444,36 @@ export default function ProctoringInterface({
                     </div>
                 )}
             </div>
+
+            {/* Fullscreen Warning System */}
+            <FullscreenWarningSystem
+                isTestActive={isActive}
+                onViolationDetected={(violationType) => {
+                    setViolationCount(prev => prev + 1);
+                    addAlert(`${violationType.replace('_', ' ')} detected`);
+                    
+                    // Reduce integrity score for violations
+                    setIntegrityScore(prev => Math.max(0, prev - 0.1));
+                    
+                    // Send violation to WebSocket
+                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                            type: 'violation_event',
+                            data: {
+                                violation_type: violationType,
+                                timestamp: Date.now(),
+                                session_id: session?.session_id
+                            }
+                        }));
+                    }
+                }}
+                onReturnToCompliance={() => {
+                    addAlert('User returned to compliant state');
+                    // Slight integrity score recovery for good behavior
+                    setIntegrityScore(prev => Math.min(1.0, prev + 0.02));
+                }}
+                maxViolations={5}
+            />
         </Card>
     );
 }

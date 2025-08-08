@@ -8,6 +8,7 @@ import ProctoringInterface from '@/components/ProctoringInterface';
 import { ArrowLeft, Clock, Shield, AlertTriangle, CheckCircle, Camera, Mic, Eye } from 'lucide-react';
 import { fetchAssignment, startProctoringSession, submitAssignmentCompletion } from '@/lib/student-api';
 import { useSession } from 'next-auth/react';
+import FullscreenWarningSystem from '@/components/FullscreenWarningSystem';
 
 function AssessmentContent() {
     const { data: session } = useSession();
@@ -1224,6 +1225,26 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                     </div>
                 </div>
             </div>
+
+            {/* Fullscreen Warning System */}
+            <FullscreenWarningSystem
+                isTestActive={!!sessionId && !isSubmitted}
+                onViolationDetected={(violationType) => {
+                    addWarning(`${violationType.replace('_', ' ')} detected - This activity has been recorded`);
+                    
+                    // Send integrity event
+                    sendIntegrityEvent('fullscreen_violation', {
+                        violation_type: violationType,
+                        question_id: questions[currentQuestion].id,
+                        timestamp: new Date().toISOString()
+                    });
+                }}
+                onReturnToCompliance={() => {
+                    // Remove violation warnings when user complies
+                    setWarnings(prev => prev.filter(w => !w.includes('detected')));
+                }}
+                maxViolations={3}
+            />
         </div>
     );
 }

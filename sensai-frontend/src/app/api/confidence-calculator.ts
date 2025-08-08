@@ -70,9 +70,9 @@ export class ConfidenceCalculator {
     
     // Adjust confidence based on cheating probability
     // High cheating probability should correlate with high confidence in detection
-    if (cheatingProbability > 0.7) {
+    if (cheatingProbability > 0.6) {
       finalConfidence = Math.max(finalConfidence, 0.7); // Boost confidence for clear cases
-    } else if (cheatingProbability < 0.3) {
+    } else if (cheatingProbability < 0.4) {
       finalConfidence = Math.min(finalConfidence, 0.6); // Reduce confidence for unclear cases
     }
 
@@ -244,11 +244,11 @@ export class ConfidenceCalculator {
 
     speakerConfidence = Math.max(0.0, Math.min(1.0, speakerConfidence));
 
-    // Overall confidence (conservative approach - use minimum)
-    const overallConfidence = Math.min(
-      speakerConfidence,
-      transcriptionQuality,
-      cheatingDetectionScore
+    // Overall confidence (weighted approach - balance factors)
+    const overallConfidence = Math.min(1.0, 
+      (speakerConfidence * 0.4) + 
+      (transcriptionQuality * 0.35) + 
+      (cheatingDetectionScore * 0.25)
     );
 
     // Generate explanation
