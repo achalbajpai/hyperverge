@@ -20,6 +20,30 @@ importers:
       '@headlessui/react':
         specifier: ^2.2.1
         version: 2.2.7(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      '@mediapipe/camera_utils':
+        specifier: ^0.3.1675465747
+        version: 0.3.1675466862
+      '@mediapipe/control_utils':
+        specifier: ^0.6.1675465747
+        version: 0.6.1675466023
+      '@mediapipe/drawing_utils':
+        specifier: ^0.3.1675465747
+        version: 0.3.1675466124
+      '@mediapipe/holistic':
+        specifier: ^0.5.1675471629
+        version: 0.5.1675471629
+      '@mediapipe/objectron':
+        specifier: ^0.4.1675465747
+        version: 0.4.1675468480
+      '@mediapipe/tasks-genai':
+        specifier: ^0.10.24
+        version: 0.10.24
+      '@mediapipe/tasks-text':
+        specifier: 0.10.22-rc.20250304
+        version: 0.10.22-rc.20250304
+      '@mediapipe/tasks-vision':
+        specifier: ^0.10.3
+        version: 0.10.21
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.52.2)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -47,6 +71,9 @@ importers:
       '@types/lodash':
         specifier: ^4.17.16
         version: 4.17.20
+      '@types/nodemailer':
+        specifier: ^6.4.17
+        version: 6.4.17
       '@types/react-datepicker':
         specifier: ^6.2.0
         version: 6.2.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -82,10 +109,13 @@ importers:
         version: 15.4.5(@babel/core@7.28.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       next-auth:
         specifier: ^4.24.11
-        version: 4.24.11(next@15.4.5(@babel/core@7.28.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+        version: 4.24.11(next@15.4.5(@babel/core@7.28.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(nodemailer@6.10.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       next-themes:
         specifier: ^0.4.4
         version: 0.4.6(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      nodemailer:
+        specifier: ^6.10.1
+        version: 6.10.1
       pdfjs-dist:
         specifier: 4.8.69
         version: 4.8.69
@@ -714,6 +744,30 @@ packages:
     resolution: {integrity: sha512-RSKlNZvxhMCkOFZ6slbYvZYbWjHUM+PxDQnupIOxIdsTZQQjx/BFfrfJ7kQFOP+g7MtpOds8weAetEs5obwMOQ==}
     peerDependencies:
       react: '>=16.8.0'
+
+  '@mediapipe/camera_utils@0.3.1675466862':
+    resolution: {integrity: sha512-siuXBoUxWo9WL0MeAxIxvxY04bvbtdNl7uCxoJxiAiRtNnCYrurr7Vl5VYQ94P7Sq0gVq6PxIDhWWeZ/pLnSzw==}
+
+  '@mediapipe/control_utils@0.6.1675466023':
+    resolution: {integrity: sha512-CB+L71vUJJSqvULGsZGfqkEiqywoCB898MiM6qWGrk8t5El0HVmHrQbsh2Gx3/N/V2xlYzoU43Wwr2FEAIFHzg==}
+
+  '@mediapipe/drawing_utils@0.3.1675466124':
+    resolution: {integrity: sha512-/IWIB/iYRMtiUKe3k7yGqvwseWHCOqzVpRDfMgZ6gv9z7EEimg6iZbRluoPbcNKHbYSxN5yOvYTzUYb8KVf22Q==}
+
+  '@mediapipe/holistic@0.5.1675471629':
+    resolution: {integrity: sha512-qY+cxtDeSOvVtevrLgnodiwXYaAtPi7dHZtNv/bUCGEjFicAOYtMmrZSqMmbPkTB2+4jLnPF1vgshkAqQRSYAw==}
+
+  '@mediapipe/objectron@0.4.1675468480':
+    resolution: {integrity: sha512-IoWuW0ojc9GaSW6UoDCIXgwjLSqTEcR5w8NYuGH+R5+q+nKzS7KOIGfY/eyx4DttReumb398W6+PpW0DQ2Rs/w==}
+
+  '@mediapipe/tasks-genai@0.10.24':
+    resolution: {integrity: sha512-ohdABwNE/BjKem3trLKd8Rg5Wm1vychOopFJsvTgTad5DxaJL36bhVLNgyfOJaGb0T14wqyLHmHGFF0Z4dPWwQ==}
+
+  '@mediapipe/tasks-text@0.10.22-rc.20250304':
+    resolution: {integrity: sha512-J2AFxsh+Pra2OZXf+T4iC8p4JeLyLjg7wU7l2mxcNPNY13wmVhYADxkOLSQq7BPRuXj5aBj7A98dBgZh++s6OQ==}
+
+  '@mediapipe/tasks-vision@0.10.21':
+    resolution: {integrity: sha512-TuhKH+credq4zLksGbYrnvJ1aLIWMc5r0UHwzxzql4BHECJwIAoBR61ZrqwGOW6ZmSBIzU1t4VtKj8hbxFaKeA==}
 
   '@monaco-editor/loader@1.5.0':
     resolution: {integrity: sha512-hKoGSM+7aAc7eRTRjpqAZucPmoNOC4UUbknb/VNoTkEIkCPhqV8LfbsgM1webRM7S/z21eHEx9Fkwx8Z/C/+Xw==}
@@ -1560,6 +1614,9 @@ packages:
 
   '@types/node@20.19.9':
     resolution: {integrity: sha512-cuVNgarYWZqxRJDQHEB58GEONhOK79QVR/qYx4S7kcUObQvUwvFnYxJuuHUKm2aieN9X3yZB4LZsuYNU1Qphsw==}
+
+  '@types/nodemailer@6.4.17':
+    resolution: {integrity: sha512-I9CCaIp6DTldEg7vyUTZi8+9Vo0hi1/T8gv3C89yk1rSAAzoKQ8H8ki/jBYJSFoH/BisgLP8tkZMlQ91CIquww==}
 
   '@types/parse5@6.0.3':
     resolution: {integrity: sha512-SuT16Q1K51EAVPz1K29DJ/sXjhSQ0zjvsypYJ6tlwVsRV9jwW5Adq2ch8Dq8kDBCkYnELS7N7VNCSB5nC56t/g==}
@@ -3875,6 +3932,10 @@ packages:
   node-releases@2.0.19:
     resolution: {integrity: sha512-xxOWJsBKtzAq7DY0J+DTzuz58K8e7sJbdgwkbMWQe8UYB6ekmsQ45q0M/tJDsGaZmbC+l7n57UV8Hl5tHxO9uw==}
 
+  nodemailer@6.10.1:
+    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+    engines: {node: '>=6.0.0'}
+
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
     engines: {node: '>=0.10.0'}
@@ -5846,6 +5907,22 @@ snapshots:
     dependencies:
       react: 19.1.1
 
+  '@mediapipe/camera_utils@0.3.1675466862': {}
+
+  '@mediapipe/control_utils@0.6.1675466023': {}
+
+  '@mediapipe/drawing_utils@0.3.1675466124': {}
+
+  '@mediapipe/holistic@0.5.1675471629': {}
+
+  '@mediapipe/objectron@0.4.1675468480': {}
+
+  '@mediapipe/tasks-genai@0.10.24': {}
+
+  '@mediapipe/tasks-text@0.10.22-rc.20250304': {}
+
+  '@mediapipe/tasks-vision@0.10.21': {}
+
   '@monaco-editor/loader@1.5.0':
     dependencies:
       state-local: 1.0.7
@@ -6690,6 +6767,10 @@ snapshots:
   '@types/node@20.19.9':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/nodemailer@6.4.17':
+    dependencies:
+      '@types/node': 20.19.9
 
   '@types/parse5@6.0.3': {}
 
@@ -9807,7 +9888,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next-auth@4.24.11(next@15.4.5(@babel/core@7.28.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
+  next-auth@4.24.11(next@15.4.5(@babel/core@7.28.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(nodemailer@6.10.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
       '@babel/runtime': 7.28.2
       '@panva/hkdf': 1.2.1
@@ -9821,6 +9902,8 @@ snapshots:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
       uuid: 8.3.2
+    optionalDependencies:
+      nodemailer: 6.10.1
 
   next-themes@0.4.6(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
@@ -9865,6 +9948,8 @@ snapshots:
   node-int64@0.4.0: {}
 
   node-releases@2.0.19: {}
+
+  nodemailer@6.10.1: {}
 
   normalize-path@3.0.0: {}
 

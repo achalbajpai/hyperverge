@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pip check:*)"
+      "Bash(pip check:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm install)"
     ],
     "deny": []
   }

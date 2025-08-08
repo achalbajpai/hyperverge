@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -317,10 +317,14 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
 
             {/* Tabs for different views */}
             <Tabs defaultValue="general" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-gray-800">
+                <TabsList className="grid w-full grid-cols-3 bg-gray-800">
                     <TabsTrigger value="general" className="flex items-center gap-2">
                         <Activity className="h-4 w-4" />
                         General Integrity
+                    </TabsTrigger>
+                    <TabsTrigger value="webcam" className="flex items-center gap-2">
+                        <Eye className="h-4 w-4" />
+                        Webcam Analysis
                     </TabsTrigger>
                     <TabsTrigger value="voice" className="flex items-center gap-2">
                         <Mic className="h-4 w-4" />
@@ -854,6 +858,208 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                     </div>
                 </div>
             )}
+                </TabsContent>
+
+                <TabsContent value="webcam" className="space-y-6 mt-6">
+                    {/* Webcam Monitoring Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-blue-500 border-opacity-70">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm text-gray-400">Face Detection</p>
+                                    <p className="text-2xl font-light text-white">
+                                        {flags.filter(f => f.evidence_data?.mediapipe_violation_type === 'face_detection').length}
+                                    </p>
+                                </div>
+                                <Eye className="h-8 w-8 text-blue-400" />
+                            </div>
+                        </div>
+
+                        <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-green-500 border-opacity-70">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm text-gray-400">Gaze Violations</p>
+                                    <p className="text-2xl font-light text-white">
+                                        {flags.filter(f => f.evidence_data?.mediapipe_violation_type === 'gaze_tracking').length}
+                                    </p>
+                                </div>
+                                <Eye className="h-8 w-8 text-green-400" />
+                            </div>
+                        </div>
+
+                        <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-orange-500 border-opacity-70">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm text-gray-400">Multiple People</p>
+                                    <p className="text-2xl font-light text-white">
+                                        {flags.filter(f => f.evidence_data?.mediapipe_violation_type === 'multiple_people').length}
+                                    </p>
+                                </div>
+                                <AlertTriangle className="h-8 w-8 text-orange-400" />
+                            </div>
+                        </div>
+
+                        <div className="bg-[#1A1A1A] text-gray-300 rounded-lg p-6 border-b-2 border-red-500 border-opacity-70">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm text-gray-400">Unauthorized Objects</p>
+                                    <p className="text-2xl font-light text-white">
+                                        {flags.filter(f => f.evidence_data?.mediapipe_violation_type === 'unauthorized_object').length}
+                                    </p>
+                                </div>
+                                <XCircle className="h-8 w-8 text-red-400" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Webcam Violations Table */}
+                    <div className="bg-[#1A1A1A] text-gray-300 rounded-lg border-b-2 border-purple-500 border-opacity-70 overflow-hidden">
+                        <div className="p-6 border-b border-gray-700">
+                            <h3 className="text-xl font-light text-white flex items-center gap-2">
+                                <Eye className="h-5 w-5 text-purple-400" />
+                                MediaPipe Webcam Violations
+                            </h3>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-700">
+                                <thead className="bg-gray-800">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                            User
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                            Violation Type
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                            Severity
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                            Confidence
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                            Evidence
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                            Timestamp
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-gray-900 divide-y divide-gray-700">
+                                    {flags
+                                        .filter(flag => flag.evidence_data?.mediapipe_violation_type)
+                                        .map((flag, index) => (
+                                            <tr key={`webcam-flag-${flag.id}-${index}`} className="hover:bg-gray-800">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div>
+                                                        <div className="text-sm font-light text-white">
+                                                            {flag.user_name || 'Unknown User'}
+                                                        </div>
+                                                        <div className="text-sm text-gray-400">{flag.user_email}</div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center gap-2">
+                                                        {flag.evidence_data?.mediapipe_violation_type === 'face_detection' && <Eye className="h-4 w-4 text-blue-400" />}
+                                                        {flag.evidence_data?.mediapipe_violation_type === 'gaze_tracking' && <Eye className="h-4 w-4 text-green-400" />}
+                                                        {flag.evidence_data?.mediapipe_violation_type === 'eye_movement' && <Eye className="h-4 w-4 text-yellow-400" />}
+                                                        {flag.evidence_data?.mediapipe_violation_type === 'multiple_people' && <AlertTriangle className="h-4 w-4 text-red-400" />}
+                                                        {flag.evidence_data?.mediapipe_violation_type === 'unauthorized_object' && <XCircle className="h-4 w-4 text-red-400" />}
+                                                        <span className="text-sm text-gray-300 capitalize">
+                                                            {flag.evidence_data?.mediapipe_violation_type?.replace('_', ' ') || 'Unknown'}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(flag.severity)}`}>
+                                                        {flag.severity}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                                    {Math.round((flag.evidence_data?.detection_confidence || flag.confidence_score) * 100)}%
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                                    <div className="max-w-xs truncate">
+                                                        {flag.evidence_data?.violation_evidence ? 
+                                                            JSON.stringify(flag.evidence_data.violation_evidence).substring(0, 50) + '...' :
+                                                            'No evidence data'
+                                                        }
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                                    {formatDate(flag.created_at)}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            onClick={() => {
+                                                                setSelectedFlag(flag);
+                                                                setShowReviewModal(true);
+                                                            }}
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="flex items-center gap-1"
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                            Review
+                                                        </Button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        {flags.filter(flag => flag.evidence_data?.mediapipe_violation_type).length === 0 && (
+                            <div className="p-8 text-center text-gray-500">
+                                No webcam violations detected
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Violation Type Breakdown */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-[#1A1A1A] text-gray-300 rounded-lg border-b-2 border-blue-500 border-opacity-70 p-6">
+                            <h4 className="text-lg font-light text-white mb-4 flex items-center gap-2">
+                                <Eye className="h-5 w-5 text-blue-400" />
+                                Detection Categories
+                            </h4>
+                            <div className="space-y-3">
+                                {['face_detection', 'gaze_tracking', 'eye_movement'].map((type) => (
+                                    <div key={type} className="flex items-center justify-between">
+                                        <span className="text-sm text-gray-300 capitalize">
+                                            {type.replace('_', ' ')}
+                                        </span>
+                                        <span className="text-sm font-medium text-white">
+                                            {flags.filter(f => f.evidence_data?.mediapipe_violation_type === type).length}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div className="bg-[#1A1A1A] text-gray-300 rounded-lg border-b-2 border-red-500 border-opacity-70 p-6">
+                            <h4 className="text-lg font-light text-white mb-4 flex items-center gap-2">
+                                <AlertTriangle className="h-5 w-5 text-red-400" />
+                                Security Violations
+                            </h4>
+                            <div className="space-y-3">
+                                {['multiple_people', 'unauthorized_object'].map((type) => (
+                                    <div key={type} className="flex items-center justify-between">
+                                        <span className="text-sm text-gray-300 capitalize">
+                                            {type.replace('_', ' ')}
+                                        </span>
+                                        <span className="text-sm font-medium text-white">
+                                            {flags.filter(f => f.evidence_data?.mediapipe_violation_type === type).length}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="voice" className="mt-6">

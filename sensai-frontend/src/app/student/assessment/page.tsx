@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import ProctoringInterface from '@/components/ProctoringInterface';
+import MediaPipeProctoringInterface from '@/components/MediaPipeProctoringInterface';
 import { ArrowLeft, Clock, Shield, AlertTriangle, CheckCircle, Camera, Mic, Eye } from 'lucide-react';
 import { fetchAssignment, startProctoringSession, submitAssignmentCompletion } from '@/lib/student-api';
 import { useSession } from 'next-auth/react';
@@ -32,6 +33,10 @@ function AssessmentContent() {
     const [suspiciousActivity, setSuspiciousActivity] = useState(false);
     const [lastTypingTime, setLastTypingTime] = useState<number>(0);
     const [typingBuffer, setTypingBuffer] = useState<string>('');
+    
+    // MediaPipe proctoring state
+    const [mediaPipeViolations, setMediaPipeViolations] = useState<any[]>([]);
+    const [mediaPipeActive, setMediaPipeActive] = useState(false);
     
     // Audio recording state (simplified for full test recording)
     const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -122,6 +127,9 @@ function AssessmentContent() {
                         if (videoRef.current) {
                             videoRef.current.srcObject = stream;
                         }
+
+                        // Activate MediaPipe proctoring
+                        setMediaPipeActive(true);
 
                         // Initialize audio recording for full test
                         await initializeAudioRecording();
@@ -262,6 +270,46 @@ function AssessmentContent() {
             });
         } catch (error) {
             console.error('Failed to send integrity event:', error);
+        }
+    };
+
+    // MediaPipe violation handler
+    const handleMediaPipeViolation = async (violation: any) => {
+        console.log('MediaPipe violation detected:', violation);
+        
+        // Add to local violations list
+        setMediaPipeViolations(prev => [violation, ...prev.slice(0, 49)]);
+        
+        // Add visual warning
+        addWarning(`🎥 ${violation.description}`);
+        
+        // Send to backend as integrity flag
+        try {
+            if (sessionId) {
+                const flagData = {
+                    flag_type: 'proctoring_violation',
+                    severity: violation.severity,
+                    confidence_score: violation.confidence,
+                    ai_analysis: `MediaPipe Analysis: ${violation.description}. Detection confidence: ${Math.round(violation.confidence * 100)}%`,
+                    evidence_data: {
+                        mediapipe_violation_type: violation.type,
+                        detection_confidence: violation.confidence,
+                        violation_evidence: violation.evidence,
+                        timestamp: violation.timestamp,
+                        question_id: questions[currentQuestion]?.id
+                    },
+                    session_id: sessionId,
+                    task_id: parseInt(assignmentId || '0')
+                };
+
+                await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/flags?user_id=${session?.user?.id || 1}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(flagData)
+                });
+            }
+        } catch (error) {
+            console.error('Failed to log MediaPipe violation:', error);
         }
     };
 
@@ -664,6 +712,10 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                 cameraStream.getTracks().forEach(track => track.stop());
                 setCameraStream(null);
             }
+            
+            // Stop MediaPipe monitoring
+            setMediaPipeActive(false);
+            
             stopAudioRecording();
 
             // Clear warning timers
@@ -1151,6 +1203,15 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                     taskId={parseInt(assignmentId || '1')}
                     questionId={questions[currentQuestion]?.id}
                     minimized={true}
+                />
+
+                {/* MediaPipe Proctoring Interface */}
+                <MediaPipeProctoringInterface
+                    isActive={mediaPipeActive}
+                    sessionId={sessionId}
+                    userId={session?.user?.id || '1'}
+                    onViolationDetected={handleMediaPipeViolation}
+                    videoRef={videoRef}
                 />
 
                 <div className="max-w-4xl mx-auto">
