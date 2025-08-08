@@ -742,6 +742,35 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
         }
     };
 
+    // Create fallback flag when analysis service is unavailable
+    const createFallbackAnalysisFlag = async (answer: string, question: any, questionIndex: number, errorStatus: string | number) => {
+        try {
+            const flagData = {
+                flag_type: 'analysis_service_unavailable',
+                severity: 'medium',
+                confidence_score: 0.8,
+                ai_analysis: `Analysis service unavailable (${errorStatus}). Answer recorded: ${answer.length} characters, ${answer.trim().split(/\s+/).length} words.`,
+                evidence_data: {
+                    answer_length: answer.length,
+                    word_count: answer.trim().split(/\s+/).length,
+                    error_status: errorStatus,
+                    question_index: questionIndex + 1,
+                    submission_time: new Date().toISOString()
+                },
+                session_id: sessionId,
+                question_id: question.id
+            };
+
+            await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/flags?user_id=${session?.user?.id || 1}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(flagData)
+            });
+        } catch (error) {
+            console.error('Failed to create fallback analysis flag:', error);
+        }
+    };
+
     // AI analysis of student answers
     const analyzeAnswer = async (answer: string, question: any, questionIndex: number, plagiarismResult?: any) => {
         console.log(`🔍 Analyzing answer ${questionIndex + 1}/${questions.length}`, {
@@ -792,11 +821,16 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                 return analysisResult;
             } else {
                 const errorText = await analysisResponse.text();
-                console.error(`❌ Nebius AI analysis failed for Q${questionIndex + 1}:`, analysisResponse.status, errorText);
+                console.warn(`⚠️ Nebius AI analysis failed for Q${questionIndex + 1} (${analysisResponse.status}). Continuing without analysis.`);
+                
+                // Create a fallback flag indicating the analysis service was unavailable
+                await createFallbackAnalysisFlag(answer, question, questionIndex, analysisResponse.status);
                 return null;
             }
         } catch (error) {
-            console.error(`❌ Error in Nebius AI analysis for Q${questionIndex + 1}:`, error);
+            console.warn(`⚠️ Nebius AI analysis error for Q${questionIndex + 1}:`, error);
+            // Create a fallback flag indicating the analysis failed
+            await createFallbackAnalysisFlag(answer, question, questionIndex, 'timeout_or_error');
             return null;
         }
 

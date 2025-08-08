@@ -107,6 +107,13 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
     // Handle follow-up actions
     const handleFollowUpAction = async (action: 'suggest_resources' | 'schedule_viva', flagId: number, userId: number) => {
         try {
+            // Find the flag to get user details
+            const flag = flags.find(f => f.id === flagId);
+            if (!flag) {
+                setError('Flag not found');
+                return;
+            }
+
             const followUpData = {
                 action_type: action,
                 flag_id: flagId,
@@ -115,24 +122,55 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
                 status: 'pending'
             };
 
-            // In a real implementation, you'd send this to your backend
-            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/follow-up-actions`, {
+            // Send email based on the action type
+            const emailResponse = await fetch('/api/send-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(followUpData)
+                body: JSON.stringify({
+                    to: flag.user_email,
+                    template: action,
+                    studentName: flag.user_name || 'Student',
+                    flagDetails: {
+                        flagType: flag.flag_type.replace('_', ' '),
+                        severity: flag.severity,
+                        confidence: Math.round(flag.confidence_score * 100),
+                        analysis: flag.ai_analysis
+                    }
+                })
             });
 
-            if (response.ok) {
-                const actionText = action === 'suggest_resources' 
-                    ? 'Learning resources have been suggested to the student'
-                    : '2-minute viva has been scheduled for the student';
+            if (emailResponse.ok) {
+                const emailResult = await emailResponse.json();
+                console.log('✅ Email sent successfully:', emailResult);
                 
-                alert(actionText); // In production, use a proper notification system
+                const actionText = action === 'suggest_resources' 
+                    ? `📧 Learning resources email sent to ${flag.user_name} (${flag.user_email})`
+                    : `📧 Viva scheduling email sent to ${flag.user_name} (${flag.user_email})`;
+                
+                alert(actionText);
+                
+                // Also send to backend for tracking (optional)
+                try {
+                    await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/follow-up-actions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ...followUpData,
+                            email_sent: true,
+                            email_details: emailResult.emailDetails
+                        })
+                    });
+                } catch (backendErr) {
+                    console.warn('Backend tracking failed:', backendErr);
+                }
+                
                 fetchFlags(); // Refresh the flags list
             } else {
-                setError('Failed to execute follow-up action');
+                const errorResult = await emailResponse.json();
+                setError(`Failed to send email: ${errorResult.error}`);
             }
         } catch (err) {
+            console.error('Error in follow-up action:', err);
             setError('Network error occurred while executing follow-up action');
         }
     };
@@ -152,8 +190,59 @@ export default function IntegrityDashboard({ orgId }: IntegrityDashboardProps) {
             });
 
             if (response.ok) {
+                // Automatically send appropriate email based on review decision
+                let emailAction: 'suggest_resources' | 'schedule_viva' | null = null;
+                
+                if (reviewData.decision === ReviewDecision.MINOR_CONCERN || reviewData.decision === ReviewDecision.NO_VIOLATION) {
+                    emailAction = 'suggest_resources';
+                } else if (reviewData.decision === ReviewDecision.INTEGRITY_VIOLATION || reviewData.decision === ReviewDecision.FURTHER_INVESTIGATION) {
+                    emailAction = 'schedule_viva';
+                }
+
+                // Send email if an action is determined
+                if (emailAction) {
+                    try {
+                        const emailResponse = await fetch('/api/send-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                to: selectedFlag.user_email,
+                                template: emailAction,
+                                studentName: selectedFlag.user_name || 'Student',
+                                flagDetails: {
+                                    flagType: selectedFlag.flag_type.replace('_', ' '),
+                                    severity: selectedFlag.severity,
+                                    confidence: Math.round(selectedFlag.confidence_score * 100),
+                                    analysis: selectedFlag.ai_analysis
+                                }
+                            })
+                        });
+
+                        if (emailResponse.ok) {
+                            const emailResult = await emailResponse.json();
+                            const emailActionText = emailAction === 'suggest_resources' 
+                                ? `📧 Learning resources email sent to ${selectedFlag.user_name}`
+                                : `📧 Viva scheduling email sent to ${selectedFlag.user_name}`;
+                            
+                            alert(`Review submitted successfully!\n${emailActionText}`);
+                        } else {
+                            alert('Review submitted, but failed to send follow-up email.');
+                        }
+                    } catch (emailErr) {
+                        console.error('Email sending failed:', emailErr);
+                        alert('Review submitted, but email sending failed.');
+                    }
+                } else {
+                    alert('Review submitted successfully!');
+                }
+
                 setShowReviewModal(false);
                 setSelectedFlag(null);
+                setReviewData({
+                    decision: ReviewDecision.NO_VIOLATION,
+                    notes: '',
+                    follow_up_action: '',
+                });
                 fetchFlags();
                 fetchStats();
             } else {
