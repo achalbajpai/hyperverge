@@ -13,8 +13,10 @@ import {
   FaceDetector, 
   FaceLandmarker, 
   PoseLandmarker,
+  HandLandmarker,
   type FaceLandmarkerResult,
-  type PoseLandmarkerResult
+  type PoseLandmarkerResult,
+  type HandLandmarkerResult
 } from '@mediapipe/tasks-vision';
 
 interface ViolationLog {
@@ -59,6 +61,7 @@ export default function MediaPipeSolutionsProctoring({
   // MediaPipe Solutions instances
   const [faceDetector, setFaceDetector] = useState<FaceDetector | null>(null);
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null);
+  const [handLandmarker, setHandLandmarker] = useState<HandLandmarker | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Performance tracking
@@ -116,6 +119,26 @@ export default function MediaPipeSolutionsProctoring({
     isRecovering: false,
     lastErrorType: null as string | null,
     recoveryStrategies: [] as string[]
+  });
+
+  // Enhanced device detection state
+  const [deviceDetectionState, setDeviceDetectionState] = useState({
+    detectedDevices: [] as Array<{
+      id: string;
+      type: 'phone' | 'tablet' | 'laptop' | 'unknown';
+      confidence: number;
+      position: { x: number, y: number };
+      size: { width: number, height: number };
+      handAssociation?: 'left' | 'right' | 'both';
+      lastDetected: number;
+    }>,
+    suspiciousGestures: [] as Array<{
+      type: string;
+      confidence: number;
+      hand: 'left' | 'right';
+      timestamp: number;
+    }>,
+    lastDeviceViolationTime: 0
   });
 
   /**
@@ -259,11 +282,26 @@ export default function MediaPipeSolutionsProctoring({
 
       const landmarker = await FaceLandmarker.createFromOptions(vision, faceLandmarkerOptions);
 
+      // Initialize Hand Landmarker for device detection
+      const handLandmarkerOptions = {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
+        },
+        runningMode: 'VIDEO' as const,
+        minHandDetectionConfidence: 0.7,
+        minHandPresenceConfidence: 0.7,
+        minTrackingConfidence: 0.7,
+        numHands: 2 // Detect both hands
+      };
+
+      const handDetector = await HandLandmarker.createFromOptions(vision, handLandmarkerOptions);
+
       setFaceDetector(detector);
       setFaceLandmarker(landmarker);
+      setHandLandmarker(handDetector);
       setIsInitialized(true);
 
-      console.log('✅ MediaPipe Solutions initialized successfully');
+      console.log('✅ MediaPipe Solutions initialized successfully (Face + Hand detection)');
       resetErrorRecoveryState(); // Reset error state on successful initialization
     } catch (error) {
       console.error('❌ Failed to initialize MediaPipe Solutions:', error);
@@ -354,6 +392,112 @@ export default function MediaPipeSolutionsProctoring({
 
 
   /**
+   * Enhanced primary face selection with weighted scoring for better accuracy
+   */
+  const selectPrimaryFace = useCallback((
+    faces: FaceTrackingData[], 
+    strategy: PrimaryPersonSelectionStrategy
+  ): string | null => {
+    if (faces.length === 0) return null;
+    if (faces.length === 1) return faces[0].id;
+    
+    const config = MEDIAPIPE_SOLUTIONS_CONFIG.multiplePeopleDetection;
+    
+    // Enhanced filtering with more flexible criteria
+    const validFaces = faces.filter(face => {
+      // More lenient stability threshold for better detection
+      const minStability = Math.max(0.3, config.stabilityThreshold - 0.2);
+      const isStableEnough = face.stabilityScore >= minStability;
+      const isRecentlyDetected = face.framesSinceDetection <= 5;
+      const isSizeValid = face.size >= config.minFaceSize * 0.8 && face.size <= config.maxFaceSize * 1.2;
+      
+      return isStableEnough && isRecentlyDetected && isSizeValid;
+    });
+    
+    const candidateFaces = validFaces.length > 0 ? validFaces : faces;
+    
+    // Enhanced weighted scoring approach for better primary selection
+    if (strategy === 'most_stable' || candidateFaces.length > 2) {
+      const scoredFaces = candidateFaces.map(face => {
+        // Calculate weighted score based on multiple factors
+        const centerPoint = { x: 0.5, y: 0.5 };
+        const distanceFromCenter = Math.sqrt(
+          Math.pow(face.position.x - centerPoint.x, 2) + 
+          Math.pow(face.position.y - centerPoint.y, 2)
+        );
+        
+        // Scoring weights
+        const stabilityWeight = 0.4;    // 40% - stability is most important
+        const sizeWeight = 0.3;         // 30% - larger faces are preferred
+        const centerWeight = 0.2;      // 20% - center position preferred
+        const continuityWeight = 0.1;  // 10% - tracking continuity
+        
+        // Normalize scores (0-1)
+        const stabilityScore = Math.min(face.stabilityScore, 1.0);
+        const sizeScore = Math.min(face.size / 0.4, 1.0); // Normalize assuming max reasonable size 0.4
+        const centerScore = Math.max(0, 1 - (distanceFromCenter * 2)); // Closer to center = higher score
+        const continuityScore = Math.max(0, 1 - (face.framesSinceDetection / 10)); // Recent detection = higher score
+        
+        const totalScore = 
+          (stabilityScore * stabilityWeight) +
+          (sizeScore * sizeWeight) +
+          (centerScore * centerWeight) +
+          (continuityScore * continuityWeight);
+        
+        return { face, score: totalScore };
+      });
+      
+      // Sort by score and return the best candidate
+      scoredFaces.sort((a, b) => b.score - a.score);
+      
+      if (config.debugMode) {
+        console.log("🎯 ENHANCED PRIMARY FACE SELECTION:", {
+          strategy,
+          candidateCount: candidateFaces.length,
+          scoredFaces: scoredFaces.map(({face, score}) => ({
+            id: face.id.substring(0, 12),
+            score: score.toFixed(3),
+            stability: face.stabilityScore.toFixed(3),
+            size: face.size.toFixed(3),
+            position: `(${face.position.x.toFixed(2)}, ${face.position.y.toFixed(2)})`
+          })),
+          selectedFace: scoredFaces[0].face.id.substring(0, 12)
+        });
+      }
+      
+      return scoredFaces[0].face.id;
+    }
+    
+    // Fallback to original strategies for specific requests
+    switch (strategy) {
+      case 'largest': {
+        return candidateFaces.reduce((largest, face) => 
+          face.size > largest.size ? face : largest
+        ).id;
+      }
+      
+      case 'center': {
+        const centerPoint = { x: 0.5, y: 0.5 };
+        return candidateFaces.reduce((closest, face) => {
+          const faceDistance = Math.sqrt(
+            Math.pow(face.position.x - centerPoint.x, 2) + 
+            Math.pow(face.position.y - centerPoint.y, 2)
+          );
+          const closestDistance = Math.sqrt(
+            Math.pow(closest.position.x - centerPoint.x, 2) + 
+            Math.pow(closest.position.y - centerPoint.y, 2)
+          );
+          return faceDistance < closestDistance ? face : closest;
+        }).id;
+      }
+      
+      case 'first':
+      default:
+        return candidateFaces[0].id;
+    }
+  }, []);
+
+  /**
    * Enhanced face tracking with stability scoring and continuity
    */
   const trackFacesWithStability = useCallback((
@@ -391,26 +535,102 @@ export default function MediaPipeSolutionsProctoring({
         });
       }
 
-      // Skip faces that are too small or too large
-      if (faceSize < config.minFaceSize || faceSize > config.maxFaceSize) {
+      // Enhanced adaptive face size filtering
+      let shouldFilterOut = false;
+      let filterReason = '';
+      
+      if (config.adaptiveSizeFiltering && faceTrackingData.length > 0) {
+        // Calculate average face size from existing tracked faces for adaptive filtering
+        const existingFaceSizes = faceTrackingData
+          .filter(f => f.framesSinceDetection <= 3) // Only consider recently seen faces
+          .map(f => f.size);
+        
+        if (existingFaceSizes.length > 0) {
+          const averageSize = existingFaceSizes.reduce((sum, size) => sum + size, 0) / existingFaceSizes.length;
+          const tolerance = config.sizeFilteringTolerance;
+          
+          // Adaptive thresholds based on existing face sizes
+          const adaptiveMinSize = Math.max(config.minFaceSize, averageSize * (1 - tolerance));
+          const adaptiveMaxSize = Math.min(config.maxFaceSize, averageSize * (1 + tolerance));
+          
+          if (faceSize < adaptiveMinSize || faceSize > adaptiveMaxSize) {
+            shouldFilterOut = true;
+            filterReason = `adaptive size outside range [${adaptiveMinSize.toFixed(3)}, ${adaptiveMaxSize.toFixed(3)}] (avg: ${averageSize.toFixed(3)})`;
+          }
+          
+          if (config.debugMode) {
+            console.log(`🔍 ADAPTIVE SIZE FILTERING for FACE ${index + 1}:`, {
+              faceSize: faceSize.toFixed(3),
+              averageExistingSize: averageSize.toFixed(3),
+              adaptiveRange: `[${adaptiveMinSize.toFixed(3)}, ${adaptiveMaxSize.toFixed(3)}]`,
+              baseRange: `[${config.minFaceSize.toFixed(3)}, ${config.maxFaceSize.toFixed(3)}]`,
+              passed: !shouldFilterOut
+            });
+          }
+        } else {
+          // Fall back to base thresholds when no existing faces
+          shouldFilterOut = faceSize < config.minFaceSize || faceSize > config.maxFaceSize;
+          if (shouldFilterOut) {
+            filterReason = `base size outside range [${config.minFaceSize}, ${config.maxFaceSize}]`;
+          }
+        }
+      } else {
+        // Standard size filtering
+        shouldFilterOut = faceSize < config.minFaceSize || faceSize > config.maxFaceSize;
+        if (shouldFilterOut) {
+          filterReason = `base size outside range [${config.minFaceSize}, ${config.maxFaceSize}]`;
+        }
+      }
+      
+      if (shouldFilterOut) {
         if (config.debugMode) {
-          console.log(`🚫 FACE ${index + 1} FILTERED OUT: size ${faceSize.toFixed(3)} outside range [${config.minFaceSize}, ${config.maxFaceSize}]`);
+          console.log(`🚫 FACE ${index + 1} FILTERED OUT: ${filterReason}`);
         }
         return;
       }
       
-      // Try to match with existing tracked faces
+      // Enhanced face matching with velocity-based prediction
       let matchedFace: FaceTrackingData | null = null;
       let minDistance = Number.MAX_VALUE;
       
       for (const existingFace of faceTrackingData) {
-        const distance = Math.sqrt(
+        // Calculate distance to current position
+        const directDistance = Math.sqrt(
           Math.pow(facePosition.x - existingFace.position.x, 2) +
           Math.pow(facePosition.y - existingFace.position.y, 2)
         );
         
-        // Match if within reasonable distance threshold
-        if (distance < 0.1 && distance < minDistance) {
+        // Calculate distance to predicted position (if available)
+        let predictedDistance = directDistance;
+        if (existingFace.predictedPosition) {
+          predictedDistance = Math.sqrt(
+            Math.pow(facePosition.x - existingFace.predictedPosition.x, 2) +
+            Math.pow(facePosition.y - existingFace.predictedPosition.y, 2)
+          );
+        }
+        
+        // Use the smaller distance for better tracking continuity
+        const distance = Math.min(directDistance, predictedDistance);
+        
+        // Enhanced matching criteria based on face tracking state
+        const baseThreshold = 0.1;
+        let matchingThreshold = baseThreshold;
+        
+        // Be more lenient for faces that were recently detected
+        if (existingFace.framesSinceDetection <= 3) {
+          matchingThreshold *= 1.5; // Allow 50% larger distance
+        }
+        
+        // Be even more lenient for highly stable faces
+        if (existingFace.stabilityScore > 0.8) {
+          matchingThreshold *= 1.3; // Allow 30% larger distance for stable faces
+        }
+        
+        // Consider face size similarity for better matching
+        const sizeDifference = Math.abs(faceSize - existingFace.size);
+        const sizeThreshold = existingFace.size * 0.3; // Allow 30% size variation
+        
+        if (distance < matchingThreshold && sizeDifference < sizeThreshold && distance < minDistance) {
           minDistance = distance;
           matchedFace = existingFace;
         }
@@ -419,27 +639,77 @@ export default function MediaPipeSolutionsProctoring({
       let faceId: string;
       let stabilityScore: number;
       let framesSinceDetection: number;
+      let velocity: { x: number, y: number } | undefined;
+      let predictedPosition: { x: number, y: number } | undefined;
+      let stabilityHistory: number[] | undefined;
       
       if (matchedFace) {
-        // Update existing face
+        // Update existing face with enhanced tracking
         faceId = matchedFace.id;
         framesSinceDetection = 0;
         
-        // Calculate stability based on position consistency
+        // Calculate velocity based on position change
+        const deltaTime = timestamp - matchedFace.lastSeen;
+        if (deltaTime > 0) {
+          velocity = {
+            x: (facePosition.x - matchedFace.position.x) / deltaTime * 1000, // pixels per second
+            y: (facePosition.y - matchedFace.position.y) / deltaTime * 1000
+          };
+          
+          // Predict next position based on velocity (assuming constant velocity)
+          const predictionTime = 33; // 33ms ahead (assuming 30fps)
+          predictedPosition = {
+            x: facePosition.x + (velocity.x * predictionTime / 1000),
+            y: facePosition.y + (velocity.y * predictionTime / 1000)
+          };
+        } else {
+          velocity = matchedFace.velocity || { x: 0, y: 0 };
+          predictedPosition = facePosition;
+        }
+        
+        // Enhanced stability calculation with multiple factors
         const positionStability = Math.max(0, 1 - (minDistance * 10));
         const sizeStability = Math.max(0, 1 - Math.abs(faceSize - matchedFace.size) * 5);
-        stabilityScore = (positionStability + sizeStability) / 2;
+        const velocityStability = velocity ? Math.max(0, 1 - (Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y) / 0.5)) : 0.8;
         
-        // Smooth the stability score
-        stabilityScore = (matchedFace.stabilityScore * 0.7) + (stabilityScore * 0.3);
+        // Weighted stability score
+        const currentStability = (positionStability * 0.4) + (sizeStability * 0.3) + (velocityStability * 0.3);
+        
+        // Multi-frame stability averaging
+        stabilityHistory = matchedFace.stabilityHistory || [];
+        stabilityHistory.push(currentStability);
+        
+        // Keep only last 5 frames for averaging
+        if (stabilityHistory.length > 5) {
+          stabilityHistory = stabilityHistory.slice(-5);
+        }
+        
+        // Calculate average stability over multiple frames
+        const averageStability = stabilityHistory.reduce((sum, score) => sum + score, 0) / stabilityHistory.length;
+        
+        // Smooth the stability score with temporal averaging
+        stabilityScore = (matchedFace.stabilityScore * 0.5) + (averageStability * 0.5);
+        
+        if (config.debugMode) {
+          console.log(`🔄 UPDATED FACE ${faceId.substring(0, 12)}:`, {
+            positionChange: minDistance.toFixed(4),
+            velocity: velocity ? `(${velocity.x.toFixed(3)}, ${velocity.y.toFixed(3)})` : 'N/A',
+            stabilityScore: stabilityScore.toFixed(3),
+            averageStability: averageStability.toFixed(3),
+            stabilityHistory: stabilityHistory.map(s => s.toFixed(2))
+          });
+        }
       } else {
         // New face detected
         faceId = `face_${timestamp}_${index}`;
         stabilityScore = 0.5; // Initial stability
         framesSinceDetection = 0;
+        velocity = { x: 0, y: 0 }; // No initial velocity
+        predictedPosition = facePosition;
+        stabilityHistory = [0.5]; // Initial stability history
         
         if (config.debugMode) {
-          console.log(`🆕 NEW FACE DETECTED: ${faceId} at position (${facePosition.x.toFixed(3)}, ${facePosition.y.toFixed(3)})`);
+          console.log(`🆕 NEW FACE DETECTED: ${faceId.substring(0, 12)} at position (${facePosition.x.toFixed(3)}, ${facePosition.y.toFixed(3)})`);
         }
       }
       
@@ -452,21 +722,50 @@ export default function MediaPipeSolutionsProctoring({
         stabilityScore,
         framesSinceDetection,
         isPrimary: false, // Will be set later
-        lastSeen: timestamp
+        lastSeen: timestamp,
+        velocity,
+        predictedPosition,
+        stabilityHistory
       });
     });
     
-    // Age existing faces that weren't detected
-    const maxMissingFrames = 10;
+    // Enhanced aging logic with velocity-based prediction for missing faces
+    const maxMissingFrames = 12; // Slightly increased for better continuity
     faceTrackingData.forEach(existingFace => {
       const wasDetected = newFaces.some(face => face.id === existingFace.id);
       if (!wasDetected && existingFace.framesSinceDetection < maxMissingFrames) {
-        // Keep tracking temporarily missing faces
+        // Update predicted position based on velocity
+        let updatedPredictedPosition = existingFace.predictedPosition || existingFace.position;
+        
+        if (existingFace.velocity && existingFace.framesSinceDetection < 5) {
+          // Use velocity to predict where the face might be
+          const deltaTime = 33; // Assume 30fps
+          updatedPredictedPosition = {
+            x: existingFace.position.x + (existingFace.velocity.x * deltaTime * (existingFace.framesSinceDetection + 1) / 1000),
+            y: existingFace.position.y + (existingFace.velocity.y * deltaTime * (existingFace.framesSinceDetection + 1) / 1000)
+          };
+        }
+        
+        // Decay rate based on how long the face has been missing
+        const decayRate = 0.8 + (0.1 * Math.max(0, 1 - existingFace.framesSinceDetection / 5)); // Slower decay initially
+        
+        // Keep tracking temporarily missing faces with predicted positions
         newFaces.push({
           ...existingFace,
           framesSinceDetection: existingFace.framesSinceDetection + 1,
-          stabilityScore: existingFace.stabilityScore * 0.9 // Decay stability
+          stabilityScore: existingFace.stabilityScore * decayRate,
+          predictedPosition: updatedPredictedPosition,
+          lastSeen: timestamp // Update last seen to current timestamp
         });
+        
+        if (config.debugMode && existingFace.framesSinceDetection === 0) {
+          console.log(`⏳ FACE ${existingFace.id.substring(0, 12)} TEMPORARILY MISSING - using prediction:`, {
+            originalPosition: `(${existingFace.position.x.toFixed(3)}, ${existingFace.position.y.toFixed(3)})`,
+            predictedPosition: `(${updatedPredictedPosition.x.toFixed(3)}, ${updatedPredictedPosition.y.toFixed(3)})`,
+            velocity: existingFace.velocity ? `(${existingFace.velocity.x.toFixed(3)}, ${existingFace.velocity.y.toFixed(3)})` : 'N/A',
+            stabilityAfterDecay: (existingFace.stabilityScore * decayRate).toFixed(3)
+          });
+        }
       }
     });
     
@@ -521,57 +820,6 @@ export default function MediaPipeSolutionsProctoring({
       }
     };
   }, [faceTrackingData, calculateFaceSize, selectPrimaryFace]);
-
-  /**
-   * Smart primary face selection with multiple strategies
-   */
-  const selectPrimaryFace = useCallback((
-    faces: FaceTrackingData[], 
-    strategy: PrimaryPersonSelectionStrategy
-  ): string | null => {
-    if (faces.length === 0) return null;
-    if (faces.length === 1) return faces[0].id;
-    
-    // Filter out faces that haven't been stable enough
-    const stableFaces = faces.filter(face => 
-      face.stabilityScore >= MEDIAPIPE_SOLUTIONS_CONFIG.multiplePeopleDetection.stabilityThreshold
-    );
-    
-    const candidateFaces = stableFaces.length > 0 ? stableFaces : faces;
-    
-    switch (strategy) {
-      case 'largest': {
-        return candidateFaces.reduce((largest, face) => 
-          face.size > largest.size ? face : largest
-        ).id;
-      }
-      
-      case 'center': {
-        const centerPoint = { x: 0.5, y: 0.5 };
-        return candidateFaces.reduce((closest, face) => {
-          const faceDistance = Math.sqrt(
-            Math.pow(face.position.x - centerPoint.x, 2) + 
-            Math.pow(face.position.y - centerPoint.y, 2)
-          );
-          const closestDistance = Math.sqrt(
-            Math.pow(closest.position.x - centerPoint.x, 2) + 
-            Math.pow(closest.position.y - centerPoint.y, 2)
-          );
-          return faceDistance < closestDistance ? face : closest;
-        }).id;
-      }
-      
-      case 'most_stable': {
-        return candidateFaces.reduce((mostStable, face) => 
-          face.stabilityScore > mostStable.stabilityScore ? face : mostStable
-        ).id;
-      }
-      
-      case 'first':
-      default:
-        return candidateFaces[0].id;
-    }
-  }, []);
 
   /**
    * Process face landmarker results with enhanced multiple people support
@@ -778,7 +1026,7 @@ export default function MediaPipeSolutionsProctoring({
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
-    if (!ctx || !faceLandmarker || !faceDetector) {
+    if (!ctx || !faceLandmarker || !faceDetector || !handLandmarker) {
       if (MEDIAPIPE_SOLUTIONS_CONFIG.multiplePeopleDetection.debugMode) {
         console.log("⚠️ PROCESS FRAME EARLY EXIT:", {
           hasVideo: !!videoRef.current,
@@ -787,7 +1035,8 @@ export default function MediaPipeSolutionsProctoring({
           isInitialized: isInitialized,
           hasContext: !!ctx,
           hasFaceLandmarker: !!faceLandmarker,
-          hasFaceDetector: !!faceDetector
+          hasFaceDetector: !!faceDetector,
+          hasHandLandmarker: !!handLandmarker
         });
       }
       return;
@@ -845,6 +1094,19 @@ export default function MediaPipeSolutionsProctoring({
       
       processFaceLandmarkerResults(faceLandmarkerResults, ctx);
 
+      // Process hand landmarks for device detection
+      const handResults = await handLandmarker.detectForVideo(video, performance.now());
+      
+      if (handResults.landmarks && handResults.landmarks.length > 0) {
+        const detectedDevices = detectUnauthorizedDevices(handResults, canvas);
+        processDeviceDetectionViolations(detectedDevices);
+        
+        // Draw hand landmarks for debugging
+        if (MEDIAPIPE_SOLUTIONS_CONFIG.multiplePeopleDetection.debugMode) {
+          drawHandLandmarks(handResults, ctx, canvas);
+        }
+      }
+
       // Update performance metrics
       const processingTime = performance.now() - startTime;
       setPerformanceMetrics(prev => ({
@@ -858,7 +1120,7 @@ export default function MediaPipeSolutionsProctoring({
     } finally {
       processingRef.current = false;
     }
-  }, [videoRef, isInitialized, faceLandmarker, faceDetector, processFaceLandmarkerResults]);
+  }, [videoRef, isInitialized, faceLandmarker, faceDetector, handLandmarker, processFaceLandmarkerResults, detectUnauthorizedDevices, processDeviceDetectionViolations]);
 
   /**
    * Handle no face detected
@@ -967,6 +1229,184 @@ export default function MediaPipeSolutionsProctoring({
       );
     }
   }, [calibration.gazeBaseline, createThrottledViolation, calculateGazeDirection]);
+
+  /**
+   * Enhanced device detection using hand landmarks and geometric analysis
+   */
+  const detectUnauthorizedDevices = useCallback((handResults: HandLandmarkerResult, canvas: HTMLCanvasElement): Array<{
+    id: string;
+    type: 'phone' | 'tablet' | 'unknown';
+    confidence: number;
+    position: { x: number, y: number };
+    size: { width: number, height: number };
+    handAssociation: 'left' | 'right';
+  }> => {
+    const detectedDevices: Array<{
+      id: string;
+      type: 'phone' | 'tablet' | 'unknown';
+      confidence: number;
+      position: { x: number, y: number };
+      size: { width: number, height: number };
+      handAssociation: 'left' | 'right';
+    }> = [];
+
+    if (!handResults.landmarks || handResults.landmarks.length === 0) {
+      return detectedDevices;
+    }
+
+    handResults.landmarks.forEach((landmarks, handIndex) => {
+      const handedness = handResults.handednesses?.[handIndex]?.[0];
+      if (!handedness) return;
+
+      const handType = handedness.categoryName === 'Left' ? 'right' : 'left'; // MediaPipe is mirrored
+      
+      // Analyze hand gesture for device holding patterns
+      const deviceAnalysis = analyzeHandForDevice(landmarks, handType, canvas);
+      
+      if (deviceAnalysis.isHoldingDevice) {
+        detectedDevices.push({
+          id: `device_${Date.now()}_${handIndex}`,
+          type: deviceAnalysis.deviceType,
+          confidence: deviceAnalysis.confidence,
+          position: deviceAnalysis.position,
+          size: deviceAnalysis.size,
+          handAssociation: handType
+        });
+      }
+    });
+
+    return detectedDevices;
+  }, []);
+
+  /**
+   * Analyze hand landmarks for device holding patterns
+   */
+  const analyzeHandForDevice = useCallback((
+    landmarks: Array<{x: number, y: number}>, 
+    handType: 'left' | 'right',
+    canvas: HTMLCanvasElement
+  ) => {
+    // Key hand landmarks for device detection
+    const wrist = landmarks[0];
+    const thumb = landmarks[4];
+    const indexTip = landmarks[8];
+    const middleTip = landmarks[12];
+    const ringTip = landmarks[16];
+    const pinkyTip = landmarks[20];
+    
+    // Calculate distances and angles
+    const thumbIndexDistance = Math.sqrt(
+      Math.pow(thumb.x - indexTip.x, 2) + Math.pow(thumb.y - indexTip.y, 2)
+    );
+    
+    const handSpan = Math.sqrt(
+      Math.pow(pinkyTip.x - thumb.x, 2) + Math.pow(pinkyTip.y - thumb.y, 2)
+    );
+    
+    // Device holding pattern analysis
+    let deviceType: 'phone' | 'tablet' | 'unknown' = 'unknown';
+    let confidence = 0;
+    let isHoldingDevice = false;
+    
+    // Phone holding pattern: thumb and fingers form grip
+    const isPhoneGrip = thumbIndexDistance < 0.15 && 
+                       handSpan < 0.25 && 
+                       thumb.y < wrist.y && // Thumb above wrist
+                       Math.abs(indexTip.y - middleTip.y) < 0.05; // Fingers aligned
+    
+    // Tablet holding pattern: wider grip with more finger spread
+    const isTabletGrip = handSpan > 0.25 && 
+                        handSpan < 0.4 && 
+                        thumbIndexDistance > 0.15 &&
+                        thumb.y < wrist.y;
+    
+    // Enhanced detection with confidence scoring
+    if (isPhoneGrip) {
+      deviceType = 'phone';
+      confidence = Math.min(0.9, 0.6 + (0.3 * (1 - thumbIndexDistance / 0.15)));
+      isHoldingDevice = confidence > 0.7;
+    } else if (isTabletGrip) {
+      deviceType = 'tablet';
+      confidence = Math.min(0.85, 0.5 + (0.35 * (handSpan / 0.4)));
+      isHoldingDevice = confidence > 0.65;
+    }
+    
+    // Calculate device position and size
+    const devicePosition = {
+      x: (thumb.x + indexTip.x) / 2,
+      y: (thumb.y + indexTip.y) / 2
+    };
+    
+    const deviceSize = {
+      width: handSpan * canvas.width,
+      height: handSpan * canvas.height * 0.6 // Assume rectangular device
+    };
+    
+    return {
+      isHoldingDevice,
+      deviceType,
+      confidence,
+      position: devicePosition,
+      size: deviceSize
+    };
+  }, []);
+
+  /**
+   * Process device detection violations
+   */
+  const processDeviceDetectionViolations = useCallback((detectedDevices: Array<{
+    id: string;
+    type: 'phone' | 'tablet' | 'unknown';
+    confidence: number;
+    position: { x: number, y: number };
+    size: { width: number, height: number };
+    handAssociation: 'left' | 'right';
+  }>) => {
+    if (detectedDevices.length === 0) return;
+    
+    const now = Date.now();
+    const config = MEDIAPIPE_SOLUTIONS_CONFIG.multiplePeopleDetection;
+    
+    // Throttle device violations to prevent spam
+    if (now - deviceDetectionState.lastDeviceViolationTime < 3000) {
+      return;
+    }
+    
+    detectedDevices.forEach(device => {
+      if (device.confidence > 0.7) {
+        createThrottledViolation(
+          'unauthorized_object',
+          device.confidence > 0.85 ? 'high' : 'medium',
+          `${device.type} detected in ${device.handAssociation} hand`,
+          device.confidence,
+          {
+            deviceType: device.type,
+            hand: device.handAssociation,
+            position: device.position,
+            size: device.size,
+            detectionMethod: 'hand_gesture_analysis'
+          }
+        );
+        
+        if (config.debugMode) {
+          console.log(`📱 DEVICE DETECTED:`, {
+            type: device.type,
+            hand: device.handAssociation,
+            confidence: device.confidence.toFixed(3),
+            position: `(${device.position.x.toFixed(3)}, ${device.position.y.toFixed(3)})`,
+            size: `${device.size.width.toFixed(0)}x${device.size.height.toFixed(0)}`
+          });
+        }
+      }
+    });
+    
+    // Update device detection state
+    setDeviceDetectionState(prev => ({
+      ...prev,
+      detectedDevices: detectedDevices.map(d => ({...d, lastDetected: now})),
+      lastDeviceViolationTime: now
+    }));
+  }, [deviceDetectionState.lastDeviceViolationTime, createThrottledViolation]);
 
   /**
    * Process eye tracking
@@ -1096,6 +1536,48 @@ export default function MediaPipeSolutionsProctoring({
     }
   }, [calculateFaceSize, detectionResult]);
 
+  /**
+   * Draw hand landmarks for debugging device detection
+   */
+  const drawHandLandmarks = useCallback((handResults: HandLandmarkerResult, ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    if (!handResults.landmarks || handResults.landmarks.length === 0) return;
+
+    handResults.landmarks.forEach((landmarks, handIndex) => {
+      const handedness = handResults.handednesses?.[handIndex]?.[0];
+      const handType = handedness?.categoryName === 'Left' ? 'right' : 'left'; // MediaPipe is mirrored
+      
+      // Choose color based on hand type
+      const color = handType === 'right' ? '#ff6b6b' : '#4ecdc4';
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2;
+
+      // Draw key landmarks
+      const keyPoints = [0, 4, 8, 12, 16, 20]; // Wrist, thumb tip, index tip, middle tip, ring tip, pinky tip
+      keyPoints.forEach(pointIndex => {
+        if (landmarks[pointIndex]) {
+          const point = landmarks[pointIndex];
+          const x = point.x * canvas.width;
+          const y = point.y * canvas.height;
+          
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      });
+
+      // Draw hand type label
+      if (landmarks[0]) {
+        const wrist = landmarks[0];
+        const x = wrist.x * canvas.width;
+        const y = wrist.y * canvas.height - 20;
+        
+        ctx.font = '12px Arial';
+        ctx.fillStyle = color;
+        ctx.fillText(`${handType.toUpperCase()} HAND`, x, y);
+      }
+    });
+  }, []);
 
   /**
    * Animation loop

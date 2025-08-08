@@ -147,6 +147,8 @@ export interface MediaPipeSolutionsConfig {
     minFaceSize: number;                   // Minimum relative face size for detection
     maxFaceSize: number;                   // Maximum relative face size for detection
     adaptiveConfidence: boolean;           // Use adaptive confidence thresholds
+    adaptiveSizeFiltering: boolean;        // Use adaptive face size filtering
+    sizeFilteringTolerance: number;        // Tolerance for adaptive size filtering
     debugMode: boolean;                    // Enable comprehensive debug logging
   };
 }
@@ -289,6 +291,8 @@ export const MEDIAPIPE_SOLUTIONS_CONFIG: MediaPipeSolutionsConfig = {
     minFaceSize: 0.12,                     // Minimum face size (12% of frame)
     maxFaceSize: 0.7,                      // Maximum face size (70% of frame)
     adaptiveConfidence: true,              // Use adaptive confidence thresholds
+    adaptiveSizeFiltering: true,           // Use adaptive face size filtering
+    sizeFilteringTolerance: 0.3,           // Tolerance for adaptive size filtering (30%)
     debugMode: true                        // Enable comprehensive debug logging
   }
 };
@@ -332,7 +336,7 @@ export type ViolationType = 'face_detection' | 'gaze_tracking' | 'eye_movement' 
 export type ViolationSeverity = keyof typeof VIOLATION_SEVERITY_MAPPING;
 
 /**
- * Face tracking data for continuity tracking
+ * Face tracking data for continuity tracking with velocity-based prediction
  */
 export interface FaceTrackingData {
   id: string;                              // Unique face ID
@@ -344,6 +348,9 @@ export interface FaceTrackingData {
   framesSinceDetection: number;           // Frames since last detection
   isPrimary: boolean;                     // Is this the primary face
   lastSeen: number;                       // Timestamp of last detection
+  velocity?: { x: number, y: number };    // Velocity for prediction (optional)
+  predictedPosition?: { x: number, y: number }; // Predicted position for tracking
+  stabilityHistory?: number[];            // Multi-frame stability history
 }
 
 /**

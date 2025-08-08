@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import ProctoringInterface from '@/components/ProctoringInterface';
 import MediaPipeProctoringInterface from '@/components/MediaPipeProctoringInterface';
+import FullscreenWarningSystem from '@/components/FullscreenWarningSystem';
 import { ArrowLeft, Clock, Shield, AlertTriangle, CheckCircle, Camera, Mic, Eye } from 'lucide-react';
 import { fetchAssignment, startProctoringSession, submitAssignmentCompletion } from '@/lib/student-api';
 import { useSession } from 'next-auth/react';
@@ -1197,6 +1198,23 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                         ))}
                     </div>
                 )}
+
+                {/* Fullscreen Warning System */}
+                <FullscreenWarningSystem
+                    isTestActive={!isSubmitting && !isSubmitted}
+                    onViolationDetected={(violationType) => {
+                        addWarning(`Fullscreen violation detected: ${violationType.replace('_', ' ')}`);
+                        sendIntegrityEvent('fullscreen_violation', {
+                            violation_type: violationType,
+                            timestamp: new Date().toISOString(),
+                            question_index: currentQuestion
+                        });
+                    }}
+                    onReturnToCompliance={() => {
+                        console.log('User returned to fullscreen compliance');
+                    }}
+                    maxViolations={5}
+                />
 
                 {/* Proctoring Interface - minimized mode */}
                 <ProctoringInterface
