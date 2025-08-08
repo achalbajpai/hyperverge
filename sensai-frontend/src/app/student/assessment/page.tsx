@@ -169,6 +169,134 @@ function AssessmentContent() {
         }
     }, [isSubmitted, router]);
 
+    // Additional tab switching and multiple tabs monitoring
+    useEffect(() => {
+        if (isSubmitting || isSubmitted) return;
+
+        let tabSwitchCount = 0;
+        let lastVisibilityChange = Date.now();
+
+        const handleVisibilityChange = () => {
+            const now = Date.now();
+            const timeSinceLastChange = now - lastVisibilityChange;
+            
+            if (document.hidden) {
+                tabSwitchCount++;
+                
+                // Rapid tab switching detection (multiple switches in short time)
+                if (timeSinceLastChange < 2000 && tabSwitchCount > 3) {
+                    setWarnings(prev => {
+                        const newWarnings = [...prev, '⚠️ Rapid tab switching detected - suspicious behavior flagged'];
+                        return newWarnings.slice(-3);
+                    });
+                    
+                    // Send integrity event
+                    if (sessionId) {
+                        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/events`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                session_id: sessionId,
+                                event_type: 'rapid_tab_switching',
+                                event_data: {
+                                    switch_count: tabSwitchCount,
+                                    time_window: timeSinceLastChange,
+                                    timestamp: new Date().toISOString(),
+                                    question_index: currentQuestion
+                                }
+                            })
+                        }).catch(console.error);
+                    }
+                } else {
+                    setWarnings(prev => {
+                        const newWarnings = [...prev, '⚠️ Tab switch detected - please stay on the test page'];
+                        return newWarnings.slice(-3);
+                    });
+                    
+                    // Send integrity event
+                    if (sessionId) {
+                        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/events`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                session_id: sessionId,
+                                event_type: 'tab_switch',
+                                event_data: {
+                                    timestamp: new Date().toISOString(),
+                                    question_index: currentQuestion,
+                                    total_switches: tabSwitchCount
+                                }
+                            })
+                        }).catch(console.error);
+                    }
+                }
+            }
+            
+            lastVisibilityChange = now;
+        };
+
+        const handleFocusChange = () => {
+            if (!document.hasFocus()) {
+                setWarnings(prev => {
+                    const newWarnings = [...prev, '⚠️ Browser window lost focus - multiple applications detected'];
+                    return newWarnings.slice(-3);
+                });
+                
+                // Send integrity event
+                if (sessionId) {
+                    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/events`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_id: sessionId,
+                            event_type: 'window_focus_lost',
+                            event_data: {
+                                timestamp: new Date().toISOString(),
+                                question_index: currentQuestion
+                            }
+                        })
+                    }).catch(console.error);
+                }
+            }
+        };
+
+        const handlePageHide = () => {
+            setWarnings(prev => {
+                const newWarnings = [...prev, '⚠️ Page navigation detected - attempting to leave test'];
+                return newWarnings.slice(-3);
+            });
+            
+            // Send integrity event
+            if (sessionId) {
+                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/integrity/events`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        event_type: 'page_navigation_attempt',
+                        event_data: {
+                            timestamp: new Date().toISOString(),
+                            question_index: currentQuestion
+                        }
+                    })
+                }).catch(console.error);
+            }
+        };
+
+        // Add event listeners
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocusChange);
+        window.addEventListener('blur', handleFocusChange);
+        window.addEventListener('pagehide', handlePageHide);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocusChange);
+            window.removeEventListener('blur', handleFocusChange);
+            window.removeEventListener('pagehide', handlePageHide);
+        };
+    }, [isSubmitting, isSubmitted, currentQuestion, sessionId]);
+
     // Enhanced monitoring functions
     const addWarning = (message: string) => {
         setWarnings(prev => {
@@ -1203,15 +1331,29 @@ Suspicious Phrases: [${result.suspicious_phrases ? result.suspicious_phrases.joi
                 <FullscreenWarningSystem
                     isTestActive={!isSubmitting && !isSubmitted}
                     onViolationDetected={(violationType) => {
-                        addWarning(`Fullscreen violation detected: ${violationType.replace('_', ' ')}`);
-                        sendIntegrityEvent('fullscreen_violation', {
+                        let warningMessage = `Violation detected: ${violationType.replace('_', ' ')}`;
+                        
+                        // Specific warnings for different violation types
+                        if (violationType === 'visibility_change') {
+                            warningMessage = 'Tab switching detected - please stay on the test tab';
+                        } else if (violationType === 'window_blur') {
+                            warningMessage = 'Window focus lost - multiple applications detected';
+                        } else if (violationType === 'fullscreen_exit') {
+                            warningMessage = 'Fullscreen mode exited - please return to fullscreen';
+                        } else if (violationType === 'key_combination') {
+                            warningMessage = 'Prohibited key combination used';
+                        }
+                        
+                        addWarning(warningMessage);
+                        sendIntegrityEvent('proctoring_violation', {
                             violation_type: violationType,
                             timestamp: new Date().toISOString(),
-                            question_index: currentQuestion
+                            question_index: currentQuestion,
+                            description: warningMessage
                         });
                     }}
                     onReturnToCompliance={() => {
-                        console.log('User returned to fullscreen compliance');
+                        console.log('User returned to compliance');
                     }}
                     maxViolations={5}
                 />
