@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Camera, Mic, CheckCircle, XCircle, AlertTriangle, RefreshCw, Eye } from 'lucide-react';
+import { ArrowLeft, Camera, Mic, CheckCircle, XCircle, AlertTriangle, RefreshCw, Eye, Maximize, Minimize } from 'lucide-react';
 
 function CameraSetupContent() {
     const { data: session } = useSession();
@@ -15,10 +15,14 @@ function CameraSetupContent() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [cameraStatus, setCameraStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
     const [micStatus, setMicStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
+    const [fullscreenStatus, setFullscreenStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [assignmentData, setAssignmentData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [setupComplete, setSetupComplete] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [fullscreenViolations, setFullscreenViolations] = useState(0);
+    const [testStarted, setTestStarted] = useState(false);
 
     const assignmentId = searchParams.get('assignmentId');
     const returnTo = searchParams.get('returnTo') || 'assessment';
@@ -39,14 +43,52 @@ function CameraSetupContent() {
 
     useEffect(() => {
         // Check setup completion status
-        if (cameraStatus === 'granted' && micStatus === 'granted' && stream) {
+        if (cameraStatus === 'granted' && micStatus === 'granted' && fullscreenStatus === 'granted' && stream) {
             setSetupComplete(true);
         } else {
             setSetupComplete(false);
         }
-    }, [cameraStatus, micStatus, stream]);
+    }, [cameraStatus, micStatus, fullscreenStatus, stream]);
 
-    const requestCameraAndMic = async () => {
+    useEffect(() => {
+        // Add fullscreen change listener
+        const handleFullscreenChange = () => {
+            const isCurrentlyFullscreen = !!document.fullscreenElement;
+            setIsFullscreen(isCurrentlyFullscreen);
+            
+            // If test has started and user exits fullscreen, count as violation
+            if (testStarted && !isCurrentlyFullscreen && setupComplete) {
+                setFullscreenViolations(prev => prev + 1);
+                // You could add a toast notification here
+                console.warn('Fullscreen violation detected!');
+            }
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        };
+    }, [testStarted, setupComplete]);
+
+
+    const requestFullscreen = async () => {
+        setFullscreenStatus('requesting');
+        
+        try {
+            if (document.documentElement.requestFullscreen) {
+                await document.documentElement.requestFullscreen();
+                setFullscreenStatus('granted');
+            } else {
+                setFullscreenStatus('error');
+            }
+        } catch (error) {
+            console.error('Fullscreen request failed:', error);
+            setFullscreenStatus('denied');
+        }
+    };
+
+    const requestAllPermissions = async () => {
+        // First request camera and microphone
         setCameraStatus('requesting');
         setMicStatus('requesting');
 
@@ -69,10 +111,14 @@ function CameraSetupContent() {
                 videoRef.current.srcObject = mediaStream;
             }
 
+            // Then request fullscreen
+            await requestFullscreen();
+
             // Store permission status
             const permissionData = {
                 camera: true,
                 microphone: true,
+                fullscreen: true,
                 timestamp: new Date().toISOString(),
                 assignmentId
             };
@@ -108,17 +154,28 @@ function CameraSetupContent() {
         
         setCameraStatus('idle');
         setMicStatus('idle');
+        setFullscreenStatus('idle');
         setSetupComplete(false);
     };
 
     const proceedToTest = () => {
+        // Ensure we're in fullscreen mode
+        if (!document.fullscreenElement) {
+            alert('Please enter fullscreen mode to proceed with the assessment.');
+            requestFullscreen();
+            return;
+        }
+        
+        setTestStarted(true);
+        
         // Store setup completion
         const setupData = {
             completed: true,
             timestamp: new Date().toISOString(),
             assignmentId,
             cameraGranted: cameraStatus === 'granted',
-            micGranted: micStatus === 'granted'
+            micGranted: micStatus === 'granted',
+            fullscreenGranted: fullscreenStatus === 'granted'
         };
         localStorage.setItem('cameraSetupComplete', JSON.stringify(setupData));
 
@@ -330,25 +387,43 @@ function CameraSetupContent() {
                                     </div>
                                 </div>
 
+                                {/* Fullscreen Status */}
+                                <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                                    <div className="flex items-center space-x-3">
+                                        <Maximize className="w-5 h-5 text-purple-400" />
+                                        <span className="text-white">Fullscreen Access</span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        {getStatusIcon(fullscreenStatus)}
+                                        <span className={`text-sm ${getStatusColor(fullscreenStatus)}`}>
+                                            {getStatusText(fullscreenStatus)}
+                                        </span>
+                                    </div>
+                                </div>
+
                                 {/* Setup Instructions */}
                                 {cameraStatus === 'idle' && (
                                     <div className="mt-6">
                                         <Button
-                                            onClick={requestCameraAndMic}
+                                            onClick={requestAllPermissions}
                                             className="w-full bg-blue-600 hover:bg-blue-700"
                                         >
-                                            <Camera className="w-4 h-4 mr-2" />
-                                            Request Camera & Microphone Access
+                                            <div className="flex items-center justify-center space-x-2">
+                                                <Camera className="w-4 h-4" />
+                                                <Mic className="w-4 h-4" />
+                                                <Maximize className="w-4 h-4" />
+                                                <span>Request Camera, Microphone & Fullscreen Access</span>
+                                            </div>
                                         </Button>
                                     </div>
                                 )}
 
                                 {/* Error Handling */}
-                                {(cameraStatus === 'denied' || micStatus === 'denied') && (
+                                {(cameraStatus === 'denied' || micStatus === 'denied' || fullscreenStatus === 'denied') && (
                                     <div className="mt-6 space-y-4">
                                         <div className="p-3 bg-red-900 border border-red-500 rounded-lg">
                                             <p className="text-red-200 text-sm">
-                                                <strong>Permission Denied:</strong> Please enable camera and microphone access 
+                                                <strong>Permission Denied:</strong> Please enable camera, microphone, and fullscreen access 
                                                 in your browser settings and try again.
                                             </p>
                                         </div>
@@ -364,12 +439,12 @@ function CameraSetupContent() {
                                 )}
 
                                 {/* Error Messages */}
-                                {(cameraStatus === 'error' || micStatus === 'error') && (
+                                {(cameraStatus === 'error' || micStatus === 'error' || fullscreenStatus === 'error') && (
                                     <div className="mt-6 space-y-4">
                                         <div className="p-3 bg-yellow-900 border border-yellow-500 rounded-lg">
                                             <p className="text-yellow-200 text-sm">
-                                                <strong>Device Error:</strong> Unable to access your camera or microphone. 
-                                                Please check your device settings and ensure they are not being used by other applications.
+                                                <strong>Device Error:</strong> Unable to access your camera, microphone, or fullscreen mode. 
+                                                Please check your device settings and browser permissions.
                                             </p>
                                         </div>
                                         <Button
@@ -383,12 +458,42 @@ function CameraSetupContent() {
                                     </div>
                                 )}
 
+                                {/* Fullscreen Status Indicator */}
+                                {testStarted && (
+                                    <div className="mt-6">
+                                        <div className={`p-3 border rounded-lg ${
+                                            isFullscreen 
+                                                ? 'bg-green-900 border-green-500' 
+                                                : 'bg-red-900 border-red-500'
+                                        }`}>
+                                            <div className="flex items-center space-x-2">
+                                                {isFullscreen ? (
+                                                    <>
+                                                        <Maximize className="w-4 h-4 text-green-400" />
+                                                        <span className="text-green-200 text-sm">Fullscreen Active</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Minimize className="w-4 h-4 text-red-400" />
+                                                        <span className="text-red-200 text-sm">Fullscreen Required</span>
+                                                        {fullscreenViolations > 0 && (
+                                                            <span className="bg-red-600 text-white px-2 py-1 rounded-full text-xs ml-2">
+                                                                {fullscreenViolations} violations
+                                                            </span>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Success and Proceed */}
                                 {setupComplete && (
                                     <div className="mt-6 space-y-4">
                                         <div className="p-3 bg-green-900 border border-green-500 rounded-lg">
                                             <p className="text-green-200 text-sm">
-                                                <strong>Setup Complete:</strong> Your camera and microphone are working correctly. 
+                                                <strong>Setup Complete:</strong> Your camera, microphone, and fullscreen permissions are granted. 
                                                 You can now proceed to your assessment.
                                             </p>
                                         </div>
@@ -432,6 +537,7 @@ function CameraSetupContent() {
                                     <li>• Close other applications</li>
                                     <li>• Ensure stable internet connection</li>
                                     <li>• Remove unauthorized materials from view</li>
+                                    <li>• Stay in fullscreen mode throughout the test</li>
                                 </ul>
                             </div>
                         </div>
